@@ -1,8 +1,6 @@
--- Schema for shopping mall demo (matches Java entities)
-
 PRAGMA foreign_keys = ON;
 
--- Users table (matches com.entities.User where id is int)
+-- Users table
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL UNIQUE,
@@ -25,7 +23,7 @@ CREATE TABLE IF NOT EXISTS items (
     like_count INTEGER NOT NULL DEFAULT 0
 );
 
--- Payment methods (matches com.entities.PaymentMethod)
+-- Payment methods
 CREATE TABLE IF NOT EXISTS payment_methods (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -37,7 +35,7 @@ CREATE TABLE IF NOT EXISTS payment_methods (
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Wishlist (matches com.entities.Wishlist)
+-- Wishlist
 CREATE TABLE IF NOT EXISTS wishlist (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     customer_id INTEGER NOT NULL,
@@ -54,7 +52,7 @@ CREATE TABLE IF NOT EXISTS orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     customer_id INTEGER NOT NULL,
     order_date INTEGER NOT NULL,
-    status TEXT NOT NULL CHECK(status IN ('PLACE', 'SHIPPED', 'DELIVERED', 'CANCELED')),
+    status TEXT NOT NULL CHECK(status IN ('PLACED', 'SHIPPED', 'DELIVERED', 'CANCELED')),
     total_amount REAL NOT NULL,
     billing_address TEXT,
     payment_method_id INTEGER DEFAULT NULL,

@@ -1,16 +1,16 @@
 package com.common.dto;
 
 public class LoginRequest {
-    private final String usernameOrEmail;
+    private final String username;
     private final String password;
 
-    public LoginRequest(String usernameOrEmail, String password) {
-        this.usernameOrEmail = usernameOrEmail;
+    public LoginRequest(String username, String password) {
+        this.username = username;
         this.password = password;
     }
 
-    public String getUsernameOrEmail() {
-        return usernameOrEmail;
+    public String getUsername() {
+        return username;
     }
 
     public String getPassword() {
@@ -18,6 +18,6 @@ public class LoginRequest {
     }
 
     public String toString() {
-        return "LoginRequest[user=" + usernameOrEmail + "]";
+        return "LoginRequest [user=" + username + "]";
     }
 }

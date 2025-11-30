@@ -3,10 +3,8 @@ package com.common;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.sql.*;
+import java.util.*;
 
 /**
  * Minimal database helper that opens a JDBC connection and runs the
@@ -15,6 +13,7 @@ import java.sql.Statement;
  * This keeps initialization outside of the business logic and lets
  * subsystems run DB calls from their async handlers.
  */
+
 public class Database {
     private Connection connection;
 
@@ -24,6 +23,7 @@ public class Database {
      *
      * Example: connect("jdbc:h2:mem:shopping_mall")
      */
+
     public void connect(String url) {
         try {
             connection = DriverManager.getConnection(url);
@@ -32,20 +32,21 @@ public class Database {
             Path schemaPath = Path.of("src/com/resources/schema.sql");
             if (Files.exists(schemaPath)) {
                 String sql = Files.readString(schemaPath);
-                // Split statements on semicolon followed by newline to be conservative
                 String[] statements = sql.split(";\n");
+
                 try (Statement stmt = connection.createStatement()) {
                     for (String s : statements) {
                         String trim = s.trim();
-                        if (trim.isEmpty()) continue;
+                        if (trim.isEmpty())
+                            continue;
                         try {
                             stmt.execute(trim);
                         } catch (SQLException ex) {
-                            // Log and continue - some statements like PRAGMA may not be supported
                             System.err.println("[Database] Failed to execute statement: " + ex.getMessage());
                         }
                     }
                 }
+
                 System.out.println("[Database] Schema executed from " + schemaPath.toString());
             } else {
                 System.out.println("[Database] Schema file not found at: " + schemaPath.toString());

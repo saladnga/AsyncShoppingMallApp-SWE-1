@@ -7,7 +7,9 @@ import com.services.TimeActor;
 import com.common.Database;
 import com.subsystems.*;
 import java.util.Scanner;
+import java.util.concurrent.CompletableFuture;
 import com.common.dto.*;
+import java.util.Map;
 
 public class Main {
     private static User currentUser = null;
@@ -231,6 +233,38 @@ public class Main {
 
         wishlist = new WishlistManagement();
         wishlist.init(broker);
+
+        broker.registerListener(EventType.USER_LOGIN_SUCCESS, (msg) -> {
+            Object payload = msg.getPayload();
+            if (payload instanceof Map) {
+                Map<?, ?> data = (Map<?, ?>) payload;
+                Object userObj = data.get("user");
+                if (userObj instanceof User) {
+                    currentUser = (User) userObj;
+                }
+            }
+            return CompletableFuture.completedFuture(null);
+        });
+
+        broker.registerListener(EventType.USER_LOGIN_FAILED, (msg) -> {
+            return CompletableFuture.completedFuture(null);
+        });
+
+        broker.registerListener(EventType.USER_REGISTER_SUCCESS, (msg) -> {
+            Object payload = msg.getPayload();
+            if (payload instanceof Map) {
+                Map<?, ?> data = (Map<?, ?>) payload;
+                Object userObj = data.get("user");
+                if (userObj instanceof User) {
+                    currentUser = (User) userObj;
+                }
+            }
+            return CompletableFuture.completedFuture(null);
+        });
+
+        broker.registerListener(EventType.USER_REGISTER_FAILED, (msg) -> {
+            return CompletableFuture.completedFuture(null);
+        });
     }
 
     private static void login(AsyncMessageBroker broker) {
@@ -251,8 +285,28 @@ public class Main {
         String email = scanner.nextLine();
         System.out.println("Enter password:");
         String password = scanner.nextLine();
+        System.out.println("Enter phone number (optional):");
+        String phoneNumber = scanner.nextLine();
+        System.out.println("Enter address (optional):");
+        String address = scanner.nextLine();
+        System.out.println("Select role: 1) Customer (default) | 2) Staff | 3) CEO");
+        String roleInput = scanner.nextLine();
+        User.Role role = User.Role.Customer;
+        if (roleInput != null) {
+            switch (roleInput.trim()) {
+                case "2":
+                    role = User.Role.Staff;
+                    break;
+                case "3":
+                    role = User.Role.CEO;
+                    break;
+                default:
+                    role = User.Role.Customer;
+            }
+        }
 
-        RegistrationRequest registrationRequest = new RegistrationRequest(username, email, password);
+        RegistrationRequest registrationRequest = new RegistrationRequest(username, email, password, role, phoneNumber,
+                address);
         broker.publish(EventType.USER_REGISTER_REQUESTED, registrationRequest);
         System.out.println("Processing registration...");
     }

@@ -7,17 +7,22 @@ import com.entities.*;
 import com.services.*;
 import com.repository.*;
 import com.subsystems.*;
+import com.ui.CeoUI;
+import com.ui.CustomerUI;
+import com.ui.StaffUI;
+import com.ui.UIHelper;
 import com.common.dto.account.*;
 import com.common.dto.auth.*;
 import com.common.dto.item.*;
 import com.common.dto.message.*;
 import com.common.dto.order.*;
-import com.common.dto.report.DailyReportRequest;
-import com.common.dto.report.MonthlyReportRequest;
+import com.common.dto.payment.*;
 import com.common.dto.wishlist.*;
 import com.managers.account.*;
 import com.managers.item.*;
+import com.managers.message.*;
 import com.managers.order.*;
+import com.managers.payment.*;
 import com.managers.report.ReportManager;
 import com.managers.wishlist.*;
 
@@ -25,10 +30,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.Scanner;
+import java.io.Console; // For hidden password input
 
 public class Main {
 
-    private static User currentUser = null;
+    public static User currentUser = null;
     private static final Scanner scanner = new Scanner(System.in);
 
     // Subsystems
@@ -38,15 +44,20 @@ public class Main {
     private static OrderManagement order;
     private static PaymentService payment;
     private static Reporting reporting;
+
     private static WishlistManagement wishlist;
 
     // Broker + DB
     private static AsyncMessageBroker broker;
     private static Database database;
 
-    public static void main(String[] args) {
+    // Secret codes for staff/CEO registration
+    private static final String STAFF_SECRET_CODE = "STAFF2025";
+    private static final String CEO_SECRET_CODE = "CEO2025";
 
-        System.out.println("[Main] Shopping Mall Application Starting...");
+    public static void main(String[] args) {
+        UIHelper.clear();
+        System.out.println(UIHelper.CYAN + "[Main] Shopping Mall Application Starting..." + UIHelper.RESET);
 
         // --------------------------------------------------------------
         // 1. Init Broker
@@ -125,32 +136,27 @@ public class Main {
             if (u instanceof User user) {
                 currentUser = user;
                 System.out.println("[Main] Welcome " + user.getUsername() + " (" + user.getRole() + ")");
-                switch (user.getRole()) {
-                    case CUSTOMER -> lastMenu = "CUSTOMER";
-                    case STAFF -> lastMenu = "STAFF";
-                    case CEO -> lastMenu = "CEO";
-                }
+                // User logged in successfully - UI menus will handle role-specific display
             }
         }));
 
-        broker.registerListener(EventType.ITEM_LIST_RETURNED, msg -> CompletableFuture.runAsync(() -> {
-            Object payload = msg.getPayload();
-            if (payload instanceof List<?> items) {
-                System.out.println("Available items:");
-                for (Object obj : items) {
-                    if (obj instanceof Item item) {
-                        System.out.println(item.getId() + " | " +
-                                item.getName() + " | $" + item.getPrice() +
-                                " | stock=" + item.getStockQuantity());
-                    }
-                }
-                System.out.println("=======================");
-            }
-        }));
+        // broker.registerListener(EventType.ITEM_LIST_RETURNED, msg ->
+        // CompletableFuture.runAsync(() -> {
+        // //if (!VERBOSE_LISTENERS) return;
+        // Object payload = msg.getPayload();
+        // if (payload instanceof List<?> items) {
+        // System.out.println("[Debug] Available items:");
+        // for (Object obj : items) {
+        // if (obj instanceof Item item) {
+        // System.out.println(item.getId() + " | " +
+        // item.getName() + " | $" + item.getPrice() +
+        // " | stock=" + item.getStockQuantity());
+        // }
+        // }
+        // }
+        // }));
 
-        broker.registerListener(EventType.USER_LOGIN_FAILED, msg -> CompletableFuture.runAsync(() ->
-
-        {
+        broker.registerListener(EventType.USER_LOGIN_FAILED, msg -> CompletableFuture.runAsync(() -> {
             System.out.println("[Main] Login failed: " + msg.getPayload());
         }));
 
@@ -218,26 +224,27 @@ public class Main {
             }
         }));
 
-        // Handle order history responses
-        broker.registerListener(EventType.ORDER_HISTORY_RETURNED, msg -> CompletableFuture.runAsync(() -> {
-            Object payload = msg.getPayload();
-            if (payload instanceof List<?> orders) {
-                if (orders.isEmpty()) {
-                    System.out.println("You have no order history.");
-                } else {
-                    System.out.println("=== Your Order History ===");
-                    for (Object obj : orders) {
-                        if (obj instanceof Order order) {
-                            System.out.println("Order ID: " + order.getId() +
-                                    " | Date: " + order.getOrderDate() +
-                                    " | Total: $" + order.getTotalAmount() +
-                                    " | Status: " + order.getStatus());
-                        }
-                    }
-                    System.out.println("==========================");
-                }
-            }
-        }));
+        // // Handle order history responses
+        // broker.registerListener(EventType.ORDER_HISTORY_RETURNED, msg ->
+        // CompletableFuture.runAsync(() -> {
+        // Object payload = msg.getPayload();
+        // if (payload instanceof List<?> orders) {
+        // if (orders.isEmpty()) {
+        // System.out.println("You have no order history.");
+        // } else {
+        // System.out.println("=== Your Order History ===");
+        // for (Object obj : orders) {
+        // if (obj instanceof Order order) {
+        // System.out.println("Order ID: " + order.getId() +
+        // " | Date: " + order.getOrderDate() +
+        // " | Total: $" + order.getTotalAmount() +
+        // " | Status: " + order.getStatus());
+        // }
+        // }
+        // System.out.println("==========================");
+        // }
+        // }
+        // }));
 
         // Handle account view responses
         broker.registerListener(EventType.ACCOUNT_VIEW_RETURNED, msg -> CompletableFuture.runAsync(() -> {
@@ -305,8 +312,8 @@ public class Main {
                             }
                         }
                     }
-                    System.out.println("=====================");
                 }
+                UIHelper.pause();
             }
         }));
 
@@ -356,7 +363,7 @@ public class Main {
             Object payload = msg.getPayload();
             if (payload instanceof UserMessage message) {
                 if (currentUser != null && currentUser.getRole() == User.Role.STAFF) {
-                    System.out.println("\n🔔 New message from Customer ID: " + message.getSenderId());
+                    System.out.println("\nNew message from Customer ID: " + message.getSenderId());
                     System.out.println("Subject: " + message.getSubject());
                     System.out.println("Preview: " + message.getContent().substring(0,
                             Math.min(50, message.getContent().length())) + "...");
@@ -368,7 +375,7 @@ public class Main {
             Object payload = msg.getPayload();
             if (payload instanceof UserMessage message) {
                 if (currentUser != null && currentUser.getId() == message.getRecipientId()) {
-                    System.out.println("\n💬 New reply from staff!");
+                    System.out.println("\nNew reply from staff!");
                     System.out.println("Message: " + message.getContent());
                 }
             }
@@ -424,158 +431,49 @@ public class Main {
         }));
 
         // --------------------------------------------------------------
-        // 5. Main loop
+        // 5. Main menu loop
         // --------------------------------------------------------------
         while (true) {
-
-            if (currentUser == null)
+            if (currentUser == null) {
                 showGuestMenu();
-            else {
+            } else {
                 switch (currentUser.getRole()) {
-                    case CUSTOMER -> showCustomerMenu();
-                    case STAFF -> showStaffMenu();
-                    case CEO -> showCEOMenu();
+                    case CUSTOMER -> CustomerUI.showMenu(scanner, broker);
+                    case STAFF -> StaffUI.showMenu(scanner, broker);
+                    case CEO -> CeoUI.showMenu(scanner, broker);
                 }
             }
-
-            System.out.print("> ");
-
-            String input = scanner.nextLine();
-
-            if (input.equalsIgnoreCase("Q"))
-                break;
-
-            handleMenuInput(input);
         }
-
-        shutdown(modules);
+        // Note: shutdown is called from individual UI menus when user quits
     }
 
     // ============================================================
     // MENU HANDLERS
     // ============================================================
-
-    private static String lastMenu = "GUEST";
-
     private static void showGuestMenu() {
-        lastMenu = "GUEST";
-        System.out.println("""
-                ----- Welcome -----
-                1. Login
-                2. Register (Customer)
-                3. Register with Role Selection
-                4. Browse Items
-                Q. Quit
-                """);
-    }
+        UIHelper.clear();
 
-    private static void showCustomerMenu() {
-        lastMenu = "CUSTOMER";
-        String userInfo = (currentUser != null)
-                ? String.format(" [Logged in as: %s (%s)]", currentUser.getUsername(), currentUser.getRole())
-                : "";
-        System.out.println("""
-                ----- Customer Menu%s -----
-                1. Browse Items
-                2. Search Items
-                3. View Wishlist
-                4. Add to Wishlist
-                5. Remove from Wishlist
-                6. Purchase Item
-                7. View My Orders
-                8. Send Message
-                9. View Conversations
-                10. View Account
-                11. Logout
-                Q. Quit
-                """.formatted(userInfo));
-    }
+        UIHelper.box(
+                UIHelper.color("WELCOME TO SHOPPING MALL APP", UIHelper.BLUE),
+                List.of(
+                        "1. Login",
+                        "2. Register",
+                        "3. Browse Items",
+                        "Q. Quit"));
+        System.out.print(UIHelper.YELLOW + "Select an option: " + UIHelper.RESET);
 
-    private static void showStaffMenu() {
-        lastMenu = "STAFF";
-        String userInfo = (currentUser != null)
-                ? String.format(" [Logged in as: %s (%s)]", currentUser.getUsername(), currentUser.getRole())
-                : "";
-        System.out.println("""
-                ----- Staff Menu%s -----
-                1. Refill Inventory
-                2. Upload Item
-                3. Edit Item
-                4. View Unread Messages
-                5. View All Conversations
-                6. Reply to Customer
-                7. Logout
-                Q. Quit
-                """.formatted(userInfo));
-    }
+        String input = scanner.nextLine();
 
-    private static void showCEOMenu() {
-        lastMenu = "CEO";
-        String userInfo = (currentUser != null)
-                ? String.format(" [Logged in as: %s (%s)]", currentUser.getUsername(), currentUser.getRole())
-                : "";
-        System.out.println("""
-                ----- CEO Menu%s -----
-                1. View Sales Report
-                2. Logout
-                Q. Quit
-                """.formatted(userInfo));
-    }
-
-    // ============================================================
-    // INPUT ROUTING
-    // ============================================================
-
-    private static void handleMenuInput(String input) {
-        switch (lastMenu) {
-            case "GUEST" -> handleGuestInput(input);
-            case "CUSTOMER" -> handleCustomerInput(input);
-            case "STAFF" -> handleStaffInput(input);
-            case "CEO" -> handleCEOInput(input);
-        }
-    }
-
-    private static void handleGuestInput(String input) {
         switch (input) {
             case "1" -> login();
             case "2" -> register();
-            case "3" -> registerWithRoleSelection();
-            case "4" -> browseItems();
-        }
-    }
-
-    private static void handleCustomerInput(String input) {
-        switch (input) {
-            case "1" -> browseItems();
-            case "2" -> searchItem();
-            case "3" -> viewWishlist();
-            case "4" -> addToWishlist();
-            case "5" -> removeFromWishlist();
-            case "6" -> purchaseItem();
-            case "7" -> viewOrderHistory();
-            case "8" -> sendMessage();
-            case "9" -> viewConversations();
-            case "10" -> viewAccount();
-            case "11" -> logout();
-        }
-    }
-
-    private static void handleStaffInput(String input) {
-        switch (input) {
-            case "1" -> refillItem();
-            case "2" -> uploadItem();
-            case "3" -> editItem();
-            case "4" -> viewUnreadMessages();
-            case "5" -> viewAllConversations();
-            case "6" -> replyToCustomer();
-            case "7" -> logout();
-        }
-    }
-
-    private static void handleCEOInput(String input) {
-        switch (input) {
-            case "1" -> viewSalesReport();
-            case "2" -> logout();
+            case "3" -> CustomerUI.browse(scanner, broker);
+            case "Q", "q" ->
+                shutdown(new Subsystems[] { account, item, messaging, order, payment, reporting, wishlist });
+            default -> {
+                System.out.println(UIHelper.RED + "Invalid option!" + UIHelper.RESET);
+                UIHelper.pause();
+            }
         }
     }
 
@@ -583,263 +481,106 @@ public class Main {
     // ACTIONS
     // ============================================================
 
+    private static String readPasswordHidden() {
+        Console console = System.console();
+        if (console != null) {
+            char[] password = console.readPassword();
+            return password != null ? new String(password) : "";
+        } else {
+            // Fallback: if console is not available (e.g., in IDEs), use Scanner
+            // In this case, password will be visible - this is a limitation in some
+            // environments
+            return scanner.nextLine().trim();
+        }
+    }
+
     private static void login() {
-        System.out.println("Username/Email:");
-        String id = scanner.nextLine();
-        System.out.println("Password:");
-        String pw = scanner.nextLine();
+        System.out.println(UIHelper.BLUE + "--- LOGIN ---" + UIHelper.RESET);
+        System.out.print("Username/Email: ");
+        String name = scanner.nextLine().trim();
+
+        System.out.print("Password: ");
+        String pw = readPasswordHidden();
 
         broker.publish(EventType.USER_LOGIN_REQUEST,
-                new LoginRequest(id, pw));
+                new LoginRequest(name, pw));
     }
 
     private static void register() {
-        System.out.println("Username:");
-        String username = scanner.nextLine();
-        System.out.print("Email: ");
-        String email = scanner.nextLine();
-        System.out.print("Password: ");
-        String pw = scanner.nextLine();
+        UIHelper.box(
+                UIHelper.color("REGISTER ACCOUNT", UIHelper.GREEN),
+                List.of(
+                        "1. Customer",
+                        "2. Staff",
+                        "3. CEO",
+                        "4. Back"));
+        System.out.print(UIHelper.YELLOW + "Choose your role: " + UIHelper.RESET);
+        String input = scanner.nextLine().trim();
 
-        broker.publish(EventType.USER_REGISTER_REQUESTED,
-                new RegistrationRequest(username, email, pw, com.entities.User.Role.CUSTOMER, null, null));
-        System.out.println("Registration request sent...");
-    }
-
-    private static void registerWithRoleSelection() {
-        System.out.println("=== Registration with Role Selection ===");
-        System.out.print("Username: ");
-        String username = scanner.nextLine();
-        System.out.print("Email: ");
-        String email = scanner.nextLine();
-        System.out.print("Password: ");
-        String pw = scanner.nextLine();
-
-        System.out.println("\nSelect Role:");
-        System.out.println("1. Customer");
-        System.out.println("2. Staff");
-        System.out.println("3. CEO");
-        System.out.print("Choice (1-3): ");
-
-        User.Role selectedRole;
-        String roleChoice = scanner.nextLine();
-
-        switch (roleChoice) {
-            case "1" -> selectedRole = User.Role.CUSTOMER;
-            case "2" -> selectedRole = User.Role.STAFF;
-            case "3" -> selectedRole = User.Role.CEO;
+        switch (input) {
+            case "1" -> {
+                requestCredentials(User.Role.CUSTOMER, "Customer");
+            }
+            case "2" -> registerWithSecret(User.Role.STAFF, "Staff", STAFF_SECRET_CODE);
+            case "3" -> registerWithSecret(User.Role.CEO, "CEO", CEO_SECRET_CODE);
+            case "4" -> {
+                return;
+            }
             default -> {
-                System.out.println("Invalid choice. Defaulting to Customer.");
-                selectedRole = User.Role.CUSTOMER;
+                System.out.println(UIHelper.RED + "Invalid selection." + UIHelper.RESET);
+                UIHelper.pause();
             }
         }
-
-        System.out.println("Registering as: " + selectedRole);
-        broker.publish(EventType.USER_REGISTER_REQUESTED,
-                new RegistrationRequest(username, email, pw, selectedRole, null, null));
-        System.out.println("Registration request sent...");
     }
 
-    private static void logout() {
-        currentUser = null;
-        System.out.println("[System] Logged out.");
-    }
-
-    private static void browseItems() {
-        broker.publish(EventType.ITEM_BROWSE_REQUESTED, new ItemBrowseRequest());
-    }
-
-    private static void searchItem() {
-        System.out.println("Keyword:");
-        String keyword = scanner.nextLine();
-
-        broker.publish(EventType.ITEM_SEARCH_REQUESTED,
-                new ItemSearchRequest(keyword));
-    }
-
-    private static void viewWishlist() {
-        WishlistViewRequest request = new WishlistViewRequest(currentUser.getId());
-        broker.publish(EventType.WISHLIST_VIEW_REQUESTED,
-                request);
-        System.out.println("Loading wishlist...");
-    }
-
-    private static void addToWishlist() {
-        System.out.print("Enter item ID to add to wishlist: ");
-        try {
-            int itemId = Integer.parseInt(scanner.nextLine());
-            WishlistAddRequest request = new WishlistAddRequest(currentUser.getId(), itemId, 1);
-
-            broker.publish(EventType.WISHLIST_ADD_REQUESTED, request);
-            System.out.println("Adding to wishlist...");
-        } catch (NumberFormatException e) {
-            System.out.println("Invalid item ID");
-        }
-    }
-
-    private static void removeFromWishlist() {
-        System.out.print("Enter item ID to remove from wishlist: ");
-        try {
-            int itemId = Integer.parseInt(scanner.nextLine());
-            WishlistRemoveRequest request = new WishlistRemoveRequest(currentUser.getId(), itemId);
-
-            broker.publish(EventType.WISHLIST_REMOVE_REQUESTED, request);
-            System.out.println("Removing from wishlist...");
-        } catch (NumberFormatException e) {
-            System.out.println("Invalid item ID");
-        }
-    }
-
-    private static void purchaseItem() {
-        System.out.println("Enter item ID:");
-        int itemId = Integer.parseInt(scanner.nextLine());
-
-        System.out.println("Enter quantity:");
-        int qty = Integer.parseInt(scanner.nextLine());
-
-        OrderCreateRequest.OrderItemRequest orderItem = new OrderCreateRequest.OrderItemRequest(itemId, qty);
-
-        broker.publish(EventType.PURCHASE_REQUESTED,
-                new OrderCreateRequest(currentUser.getId(),
-                        List.of(orderItem), "Default Address"));
-    }
-
-    private static void viewOrderHistory() {
-        broker.publish(EventType.ORDER_HISTORY_REQUESTED, currentUser.getId());
-    }
-
-    private static void sendMessage() {
-        System.out.println("Subject:");
-        String subject = scanner.nextLine();
-        System.out.println("Message:");
-        String content = scanner.nextLine();
-
-        // Send to all staff (recipientId = -1 indicates broadcast to all staff)
-        broker.publish(EventType.MESSAGE_SEND_REQUESTED,
-                new MessageSendRequest(currentUser.getId(), -1, subject, content));
-    }
-
-    private static void viewConversations() {
-        broker.publish(EventType.CONVERSATION_LIST_REQUESTED,
-                new ConversationListRequest(currentUser.getId()));
-    }
-
-    private static void viewAllConversations() {
-        broker.publish(EventType.CONVERSATION_LIST_REQUESTED,
-                new ConversationListRequest(currentUser.getId()));
-    }
-
-    private static void viewAccount() {
-        broker.publish(EventType.ACCOUNT_VIEW_REQUESTED,
-                new AccountViewRequest(currentUser.getId()));
-    }
-
-    private static void refillItem() {
-        System.out.println("Item ID:");
-        int id = Integer.parseInt(scanner.nextLine());
-
-        System.out.println("Quantity:");
-        int qty = Integer.parseInt(scanner.nextLine());
-
-        broker.publish(EventType.ITEM_REFILL_REQUESTED,
-                new ItemEditRequest(id, null, null, null, qty, null));
-    }
-
-    private static void uploadItem() {
-        System.out.println("Name:");
-        String name = scanner.nextLine();
-
-        System.out.println("Description:");
-        String description = scanner.nextLine();
-
-        System.out.println("Price:");
-        double price = Double.parseDouble(scanner.nextLine());
-
-        System.out.println("Stock:");
-        int stock = Integer.parseInt(scanner.nextLine());
-
-        broker.publish(EventType.ITEM_UPLOAD_REQUESTED,
-                new ItemUploadRequest(name, description, price, stock));
-    }
-
-    private static void editItem() {
-        System.out.println("Item ID:");
-        int id = Integer.parseInt(scanner.nextLine());
-
-        System.out.println("New name:");
-        String name = scanner.nextLine();
-
-        System.out.println("New description:");
-        String desc = scanner.nextLine();
-
-        System.out.println("New price:");
-        double price = Double.parseDouble(scanner.nextLine());
-
-        System.out.println("New stock:");
-        int stock = Integer.parseInt(scanner.nextLine());
-
-        broker.publish(EventType.ITEM_EDIT_REQUESTED,
-                new ItemEditRequest(id, name, desc, price, stock, null));
-    }
-
-    private static void viewUnreadMessages() {
-        broker.publish(EventType.UNREAD_MESSAGES_REQUESTED,
-                new UnreadMessagesRequest(currentUser.getId()));
-    }
-
-    private static void replyToCustomer() {
-        System.out.println("Customer ID to reply to:");
-        int customerId = Integer.parseInt(scanner.nextLine());
-
-        System.out.println("Your reply message:");
-        String reply = scanner.nextLine();
-
-        // Staff replying directly to customer (not broadcast)
-        broker.publish(EventType.MESSAGE_SEND_REQUESTED,
-                new MessageSendRequest(currentUser.getId(), customerId, "Reply", reply));
-    }
-
-    private static void viewSalesReport() {
-        if (currentUser.getRole() != User.Role.CEO) {
-            System.out.println("Access denied. Only CEO can view reports");
+    private static void registerWithSecret(User.Role role, String label, String secretCode) {
+        System.out.print(label + " Secret Code: ");
+        String provided = scanner.nextLine().trim();
+        if (!secretCode.equalsIgnoreCase(provided)) {
+            System.out.println(UIHelper.RED + "Incorrect secret code." + UIHelper.RESET);
+            UIHelper.pause();
             return;
         }
 
-        System.out.println("1. Daily Report");
-        System.out.println("2. Monthly Report");
-        System.out.print("Choose report type: ");
+        requestCredentials(role, label);
+    }
 
-        String choice = scanner.nextLine();
+    private static void requestCredentials(User.Role role, String label) {
+        System.out.print("Choose username: ");
+        String username = scanner.nextLine().trim();
 
-        switch (choice) {
-            case "1" -> {
-                DailyReportRequest request = new DailyReportRequest(currentUser.getId());
-                broker.publish(EventType.TIMER_TRIGGER_DAILY_REPORT, request);
-                System.out.println("Generating daily report...");
-            }
-            case "2" -> {
-                MonthlyReportRequest request = new MonthlyReportRequest(currentUser.getId());
-                broker.publish(EventType.TIMER_TRIGGER_MONTHLY_REPORT, request);
-                System.out.println("Generating monthly  report...");
-            }
-            default -> System.out.println("Invalid choice");
-        }
+        System.out.print("Email: ");
+        String email = scanner.nextLine().trim();
+
+        System.out.print("Password: ");
+        String password = readPasswordHidden();
+
+        System.out.print("Phone: ");
+        String phone = scanner.nextLine().trim();
+
+        System.out.print("Address: ");
+        String address = scanner.nextLine().trim();
+
+        broker.publish(EventType.USER_REGISTER_REQUESTED,
+                new RegistrationRequest(username, email, password, role, phone, address));
+
+        System.out.println(UIHelper.GREEN + label + " account created successfully. Please log in." + UIHelper.RESET);
+        UIHelper.pause();
     }
 
     // ============================================================
     // SHUTDOWN
     // ============================================================
-
     private static void shutdown(Subsystems[] modules) {
-
-        System.out.println("[System] Shutting down...");
+        System.out.println(UIHelper.RED + "[System] Shutting down..." + UIHelper.RESET);
 
         for (Subsystems m : modules)
             m.shutdown();
 
+        scanner.close();
         database.close();
         broker.stop();
-        System.out.println("[System] Application terminated.");
+        System.out.println(UIHelper.GREEN + "[System] Application terminated." + UIHelper.RESET);
         System.exit(0);
     }
 }

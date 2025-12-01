@@ -29,6 +29,7 @@ import java.util.logging.Logger;
  * Current implementation uses in-memory list as placeholder.
  * Replace with Database repo when integrating SQLite.
  */
+
 public class WishlistManagement implements Subsystems {
 
     private static final Logger LOGGER = Logger.getLogger(WishlistManagement.class.getName());
@@ -92,6 +93,7 @@ public class WishlistManagement implements Subsystems {
             Wishlist existing = wishlistRepo.findByCustomerAndItem(req.getUserId(), req.getItemId());
             if (existing != null) {
                 broker.publish(EventType.WISHLIST_ADD_FAILED, "Item already in wishlist");
+                return;
             }
 
             // Add wishlist entry
@@ -155,16 +157,8 @@ public class WishlistManagement implements Subsystems {
             LOGGER.info("[Wishlist] View requested for user=" + req.getUserId());
 
             List<Wishlist> wishlistItems = wishlistRepo.findByCustomerId(req.getUserId());
-            List<Item> result = new java.util.ArrayList<>();
-            
-            for (Wishlist wl : wishlistItems) {
-                Item item = itemRepo.findById(wl.getItemId());
-                if (item != null) {
-                    result.add(item);
-                }
-            }
 
-            broker.publish(EventType.WISHLIST_DETAILS_RETURNED, result);
+            broker.publish(EventType.WISHLIST_DETAILS_RETURNED, wishlistItems);
         });
     }
 

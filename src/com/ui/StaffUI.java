@@ -163,15 +163,28 @@ public class StaffUI {
     }
 
     private static void replyToCustomer(Scanner scanner, AsyncMessageBroker broker) {
-        System.out.print("Customer ID to reply to:");
-        int customerId = Integer.parseInt(scanner.nextLine());
+        Integer customerId = readPositiveInt(scanner, "Customer ID to reply to: ");
+        if (customerId == null) {
+            System.out.println(UIHelper.RED + "Invalid customer ID." + UIHelper.RESET);
+            UIHelper.pause();
+            return;
+        }
 
-        System.out.print("Your reply message:");
-        String reply = scanner.nextLine();
+        System.out.print("Your reply message: ");
+        String reply = scanner.nextLine().trim();
+        
+        if (reply.isEmpty()) {
+            System.out.println(UIHelper.RED + "Reply message cannot be empty." + UIHelper.RESET);
+            UIHelper.pause();
+            return;
+        }
 
         // Staff replying directly to customer (not broadcast)
         broker.publish(EventType.MESSAGE_SEND_REQUESTED,
                 new MessageSendRequest(Main.currentUser.getId(), customerId, "Reply", reply));
+        
+        System.out.println(UIHelper.GREEN + "Reply sent successfully." + UIHelper.RESET);
+        UIHelper.pause();
     }
 
     public static void reply(Scanner scanner, AsyncMessageBroker broker) {

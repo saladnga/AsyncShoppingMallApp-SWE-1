@@ -105,10 +105,20 @@ public class AsyncMessageBroker {
 
                 List<Listener> listeners = subscribers.get(message.getEventType());
 
-                if (listeners != null) {
+                // TC29: Async Broker Unknown Event - handle unmapped event types
+                if (listeners != null && !listeners.isEmpty()) {
                     for (Listener listener : listeners) {
-                        listenerExecutor.submit(() -> listener.onMessage(message));
+                        listenerExecutor.submit(() -> {
+                            try {
+                                listener.onMessage(message);
+                            } catch (Exception e) {
+                                System.err.println("[Broker] Listener error for " + message.getEventType() + ": " + e.getMessage());
+                            }
+                        });
                     }
+                } else {
+                    // TC29: Log warning for unknown events but continue running
+                    System.out.println("[Broker] Warning: No handler found for event type: " + message.getEventType() + ". Message ignored.");
                 }
 
             } catch (InterruptedException e) {

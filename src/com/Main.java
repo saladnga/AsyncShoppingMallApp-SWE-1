@@ -92,12 +92,16 @@ public class Main {
         ItemRankingRepository itemRankingRepo = new com.repository.InMemoryItemRankingRepository();
 
         ReportRepository reportRepo = new SQLiteReportRepository(database);
-        ReportManager reportManager = new ReportManager(reportRepo, null, itemRepo); // null for OrderRepository until
-                                                                                     // implemented
+        
+        // Order repositories
+        OrderRepository orderRepo = new SQLiteOrderRepository(database);
+        OrderItemRepository orderItemRepo = new SQLiteOrderItemRepository(database);
+        
+        ReportManager reportManager = new ReportManager(reportRepo, orderRepo, itemRepo);
 
         BrowseItemManager browseItemManager = new BrowseItemManager(itemRepo);
 
-        CreateOrderManager createOrderManager = new CreateOrderManager(itemRepo, null, null);
+        CreateOrderManager createOrderManager = new CreateOrderManager(itemRepo, orderRepo, orderItemRepo);
         EditItemManager editItemManager = new EditItemManager(itemRepo);
         LikeManager likeManager = new LikeManager(itemRepo);
         RankingManager rankingManager = new RankingManager(itemRankingRepo, itemRepo);
@@ -110,10 +114,10 @@ public class Main {
         // --------------------------------------------------------------
         // 4. Init Subsystems
         // --------------------------------------------------------------
-        account = new AccountManagement(registerManager, loginManager, viewAccountManager);
+        account = new AccountManagement(registerManager, loginManager, viewAccountManager, editAccountManager);
         item = new ItemManagement(itemRepo);
         messaging = new Messaging();
-        order = new OrderManagement();
+        order = new OrderManagement(createOrderManager, orderRepo, orderItemRepo, itemRepo);
         payment = new PaymentService();
         reporting = new Reporting(reportManager);
         wishlist = new WishlistManagement(wishlistRepo, itemRepo);
@@ -166,12 +170,21 @@ public class Main {
             if (payload instanceof Map<?, ?> map) {
                 Object user = map.get("user");
                 if (user instanceof User u) {
-                    System.out.println("[Main] Registration successful! Welcome " + u.getUsername());
-                    System.out.println("[Main] You can now login with your credentials.");
+                    System.out.println(UIHelper.GREEN + "Registration successful! Welcome " + u.getUsername() + UIHelper.RESET);
+                    System.out.println(UIHelper.GREEN + "You can now login with your credentials." + UIHelper.RESET);
                 }
             } else {
-                System.out.println("[Main] Registration successful! You can now login.");
+                System.out.println(UIHelper.GREEN + "Registration successful! You can now login." + UIHelper.RESET);
             }
+            UIHelper.pause();
+        }));
+
+        // Handle registration failures
+        broker.registerListener(EventType.USER_REGISTER_FAILED, msg -> CompletableFuture.runAsync(() -> {
+            Object payload = msg.getPayload();
+            String errorMsg = payload instanceof String ? (String) payload : "Registration failed. Please try again.";
+            System.out.println(UIHelper.RED + "Registration failed: " + errorMsg + UIHelper.RESET);
+            UIHelper.pause();
         }));
 
         // Handle wishlist responses
@@ -262,6 +275,23 @@ public class Main {
             }
         }));
 
+        // Handle account update success - update Main.currentUser
+        broker.registerListener(EventType.ACCOUNT_UPDATE_SUCCESS, msg -> CompletableFuture.runAsync(() -> {
+            Object payload = msg.getPayload();
+            if (payload instanceof User updatedUser) {
+                // Update the current user session with the new data
+                if (currentUser != null && currentUser.getId() == updatedUser.getId()) {
+                    currentUser = updatedUser;
+                    System.out.println("[Main] Current user session updated: " + updatedUser.getUsername());
+                }
+            }
+        }));
+
+        // Handle account update failures
+        broker.registerListener(EventType.ACCOUNT_UPDATE_FAILED, msg -> CompletableFuture.runAsync(() -> {
+            System.out.println("[Main] Account update failed: " + msg.getPayload());
+        }));
+
         // Handle messaging responses
         broker.registerListener(EventType.MESSAGE_SENT_CONFIRMATION, msg -> CompletableFuture.runAsync(() -> {
             System.out.println("[Main] Message sent successfully!");
@@ -288,34 +318,35 @@ public class Main {
             }
         }));
 
-        // Handle conversation responses
-        broker.registerListener(EventType.CONVERSATION_LIST_RETURNED, msg -> CompletableFuture.runAsync(() -> {
-            Object payload = msg.getPayload();
-            if (payload instanceof List<?> conversations) {
-                if (conversations.isEmpty()) {
-                    System.out.println("No conversations found.");
-                } else {
-                    System.out.println("=== Conversations ===");
-                    for (Object obj : conversations) {
-                        if (obj instanceof Conversation conv) {
-                            if (currentUser.getRole() == User.Role.CUSTOMER) {
-                                // Customer sees staff info
-                                System.out.println("With: " + conv.getStaffName() +
-                                        " | Last: " + conv.getLastMessage() +
-                                        " | Unread: " + conv.getUnreadCount());
-                            } else {
-                                // Staff sees customer ID clearly for replying
-                                System.out.println("Customer ID: " + conv.getCustomerId() +
-                                        " (" + conv.getCustomerName() + ")" +
-                                        " | Last: " + conv.getLastMessage() +
-                                        " | Unread: " + conv.getUnreadCount());
-                            }
-                        }
-                    }
-                }
-                UIHelper.pause();
-            }
-        }));
+        // Handle conversation responses - REMOVED to prevent duplication
+        // Conversations are now displayed directly in CustomerUI and StaffUI
+        // broker.registerListener(EventType.CONVERSATION_LIST_RETURNED, msg -> CompletableFuture.runAsync(() -> {
+        //     Object payload = msg.getPayload();
+        //     if (payload instanceof List<?> conversations) {
+        //         if (conversations.isEmpty()) {
+        //             System.out.println("No conversations found.");
+        //         } else {
+        //             System.out.println("=== Conversations ===");
+        //             for (Object obj : conversations) {
+        //                 if (obj instanceof Conversation conv) {
+        //                     if (currentUser.getRole() == User.Role.CUSTOMER) {
+        //                         // Customer sees staff info
+        //                         System.out.println("With: " + conv.getStaffName() +
+        //                                 " | Last: " + conv.getLastMessage() +
+        //                                 " | Unread: " + conv.getUnreadCount());
+        //                     } else {
+        //                         // Staff sees customer ID clearly for replying
+        //                         System.out.println("Customer ID: " + conv.getCustomerId() +
+        //                                 " (" + conv.getCustomerName() + ")" +
+        //                                 " | Last: " + conv.getLastMessage() +
+        //                                 " | Unread: " + conv.getUnreadCount());
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //         UIHelper.pause();
+        //     }
+        // }));
 
         broker.registerListener(EventType.CONVERSATION_MESSAGES_RETURNED, msg -> CompletableFuture.runAsync(() -> {
             Object payload = msg.getPayload();
@@ -481,15 +512,27 @@ public class Main {
     // ACTIONS
     // ============================================================
 
-    private static String readPasswordHidden() {
+    /**
+     * Reads password input with hidden characters (no echo) in terminal.
+     * Uses Console.readPassword() which works in real terminals.
+     * Falls back to Scanner if console is not available (e.g., in some IDEs).
+     * 
+     * IMPORTANT: For hidden password input, run the application from a terminal/command prompt.
+     * When running from an IDE, passwords may be visible due to console limitations.
+     * 
+     * @return The password string entered by the user
+     */
+    public static String readPasswordHidden() {
         Console console = System.console();
         if (console != null) {
+            // Use Console.readPassword() - this hides input in terminal
             char[] password = console.readPassword();
             return password != null ? new String(password) : "";
         } else {
             // Fallback: if console is not available (e.g., in IDEs), use Scanner
-            // In this case, password will be visible - this is a limitation in some
-            // environments
+            // Note: Password will be visible when typing - this is a limitation when
+            // running in IDEs that don't provide a real console.
+            // For hidden passwords, run from: cmd.exe, PowerShell, or terminal
             return scanner.nextLine().trim();
         }
     }
@@ -563,9 +606,6 @@ public class Main {
 
         broker.publish(EventType.USER_REGISTER_REQUESTED,
                 new RegistrationRequest(username, email, password, role, phone, address));
-
-        System.out.println(UIHelper.GREEN + label + " account created successfully. Please log in." + UIHelper.RESET);
-        UIHelper.pause();
     }
 
     // ============================================================

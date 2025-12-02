@@ -13,6 +13,7 @@ public class Database {
 
     /** Connect SQLite + load schema */
     public synchronized void connect(String url) {
+        // TC30: Database Connection Resilience - handle connection failures gracefully
         try {
             connection = DriverManager.getConnection(url);
 
@@ -25,8 +26,17 @@ public class Database {
 
             System.out.println("[Database] Connected to " + url);
 
-        } catch (Exception e) {
+        } catch (SQLException e) {
+            // TC30: Catch SQLException specifically
+            connection = null;
             System.err.println("[Database] Connection failed: " + e.getMessage());
+            System.err.println("[Database] Database unavailable. Please check if the database file exists.");
+            throw new RuntimeException("Database connection failed", e);
+        } catch (Exception e) {
+            // TC30: Catch other exceptions
+            connection = null;
+            System.err.println("[Database] Connection failed: " + e.getMessage());
+            throw new RuntimeException("Database connection failed", e);
         }
     }
 
@@ -80,8 +90,11 @@ public class Database {
 
     /** Query 1 row */
     public synchronized <T> T queryOne(String sql, ResultMapper<T> mapper, Object... params) {
-        if (connection == null)
+        // TC30: Database Connection Resilience - check connection before query
+        if (connection == null) {
+            System.err.println("[Database] queryOne failed: Database connection unavailable");
             return null;
+        }
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
 
@@ -93,7 +106,11 @@ public class Database {
             }
 
         } catch (SQLException e) {
+            // TC30: Handle SQLException gracefully
             System.err.println("[Database] queryOne failed: " + e.getMessage());
+            // Don't crash - return null to indicate failure
+        } catch (Exception e) {
+            System.err.println("[Database] queryOne error: " + e.getMessage());
         }
         return null;
     }
@@ -102,8 +119,11 @@ public class Database {
     public synchronized <T> List<T> queryList(String sql, ResultMapper<T> mapper, Object... params) {
 
         List<T> list = new ArrayList<>();
-        if (connection == null)
+        // TC30: Database Connection Resilience - check connection before query
+        if (connection == null) {
+            System.err.println("[Database] queryList failed: Database connection unavailable");
             return list;
+        }
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             fillParams(ps, params);
@@ -114,7 +134,11 @@ public class Database {
             }
 
         } catch (SQLException e) {
+            // TC30: Handle SQLException gracefully
             System.err.println("[Database] queryList failed: " + e.getMessage());
+            // Return empty list instead of crashing
+        } catch (Exception e) {
+            System.err.println("[Database] queryList error: " + e.getMessage());
         }
 
         return list;

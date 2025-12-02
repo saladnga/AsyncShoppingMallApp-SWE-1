@@ -6,6 +6,8 @@ import com.broker.Listener;
 import com.broker.Message;
 import com.common.dto.item.ItemEditRequest;
 import com.common.dto.item.ItemUploadRequest;
+import com.common.dto.item.ItemSearchRequest;
+import com.common.dto.item.ItemLikeRequest;
 import com.entities.Item;
 import com.entities.Wishlist;
 import com.entities.LikeRecord;
@@ -108,6 +110,9 @@ public class ItemManagement implements Subsystems {
             System.out.println("[ItemManagement] Browsing all items...");
 
             List<Item> items = repo.findAll();
+            
+            // Sort by like count (descending) - most liked items first
+            items.sort((a, b) -> Integer.compare(b.getLikeCount(), a.getLikeCount()));
 
             broker.publish(EventType.ITEM_LIST_RETURNED, items);
         });
@@ -116,12 +121,26 @@ public class ItemManagement implements Subsystems {
     private CompletableFuture<Void> handleSearch(Message message) {
         return CompletableFuture.runAsync(() -> {
 
-            String term = (String) message.getPayload();
-            System.out.println("[ItemManagement] Searching for: " + term);
+            Object payload = message.getPayload();
+            String term = null;
+            
+            if (payload instanceof ItemSearchRequest req) {
+                term = req.getKeyword();
+            } else if (payload instanceof String) {
+                term = (String) payload;
+            }
+            
+            System.out.println("[ItemManagement] Searching for: " + (term != null ? term : ""));
 
             List<Item> results = repo.searchByKeyword(term == null ? "" : term);
 
-            broker.publish(EventType.ITEM_LIST_RETURNED, results);
+            // TC14: Search Empty - handle no results
+            if (results == null || results.isEmpty()) {
+                System.out.println("[ItemManagement] No matches found for: " + (term != null ? term : ""));
+                broker.publish(EventType.ITEM_LIST_RETURNED, List.of());
+            } else {
+                broker.publish(EventType.ITEM_LIST_RETURNED, results);
+            }
         });
     }
 
@@ -138,13 +157,34 @@ public class ItemManagement implements Subsystems {
                 return;
             }
 
-            Item item = new Item(0, req.getName(), req.getDescription(), req.getPrice(), req.getStock(), 0);
-            int id = repo.insert(item);
-            if (id > 0) {
-                item.setId(id);
-                broker.publish(EventType.ITEM_UPDATE_SUCCESS, item);
-            } else {
-                broker.publish(EventType.ITEM_UPDATE_SUCCESS, "Upload failed");
+            // TC11: Invalid Item Upload - validate negative numbers
+            if (req.getPrice() < 0) {
+                broker.publish(EventType.ITEM_UPDATE_SUCCESS, "Invalid values: Price cannot be negative");
+                return;
+            }
+
+            if (req.getStock() < 0) {
+                broker.publish(EventType.ITEM_UPDATE_SUCCESS, "Invalid values: Stock cannot be negative");
+                return;
+            }
+
+            if (req.getName() == null || req.getName().isBlank()) {
+                broker.publish(EventType.ITEM_UPDATE_SUCCESS, "Invalid values: Item name is required");
+                return;
+            }
+
+            try {
+                Item item = new Item(0, req.getName(), req.getDescription(), req.getPrice(), req.getStock(), 0);
+                int id = repo.insert(item);
+                if (id > 0) {
+                    item.setId(id);
+                    broker.publish(EventType.ITEM_UPDATE_SUCCESS, item);
+                    System.out.println("[ItemManagement] Item uploaded: " + item.getName() + " (ID: " + id + ")");
+                } else {
+                    broker.publish(EventType.ITEM_UPDATE_SUCCESS, "Upload failed: Database error");
+                }
+            } catch (Exception e) {
+                broker.publish(EventType.ITEM_UPDATE_SUCCESS, "Upload failed: " + e.getMessage());
             }
         });
     }
@@ -269,14 +309,36 @@ public class ItemManagement implements Subsystems {
     private CompletableFuture<Void> handleLike(Message message) {
         return CompletableFuture.runAsync(() -> {
             Object payload = message.getPayload();
-            if (!(payload instanceof Integer itemId)) {
+            
+            // TC12B: Like Item - handle ItemLikeRequest properly
+            if (!(payload instanceof ItemLikeRequest req)) {
                 broker.publish(EventType.ITEM_UPDATE_SUCCESS, "Invalid like payload");
                 return;
             }
 
-            // We don't have user info here; just increment like count on item
-            repo.incrementLikeCount(itemId);
-            broker.publish(EventType.ITEM_UPDATE_SUCCESS, "Like recorded");
+            try {
+                // Check if user already liked this item
+                if (repo.existsLike(req.getUserId(), req.getItemId())) {
+                    broker.publish(EventType.ITEM_UPDATE_SUCCESS, "Item already liked");
+                    return;
+                }
+
+                // Insert like record and increment count
+                repo.insertLike(req.getUserId(), req.getItemId());
+                repo.incrementLikeCount(req.getItemId());
+                
+                // TC12B: Verify increment - get updated item to confirm
+                Item item = repo.findById(req.getItemId());
+                if (item != null) {
+                    broker.publish(EventType.ITEM_UPDATE_SUCCESS, item);
+                    System.out.println("[ItemManagement] Item #" + req.getItemId() + " liked. New count: " + item.getLikeCount());
+                } else {
+                    broker.publish(EventType.ITEM_UPDATE_SUCCESS, "Like recorded");
+                }
+            } catch (Exception e) {
+                broker.publish(EventType.ITEM_UPDATE_SUCCESS, "Like failed: " + e.getMessage());
+                System.out.println("[ItemManagement] Like error: " + e.getMessage());
+            }
         });
     }
 }

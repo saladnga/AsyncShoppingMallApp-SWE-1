@@ -123,14 +123,26 @@ public class Reporting implements Subsystems {
     }
 
     private Report generateReport(Report.ReportType type) {
+        Report report;
         switch (type) {
             case DAILY -> {
-                return reportManager.generateDailyReport();
+                report = reportManager.generateDailyReport();
             }
             case MONTHLY -> {
-                return reportManager.generateMonthlyReport();
+                report = reportManager.generateMonthlyReport();
             }
             default -> throw new IllegalArgumentException("Unknown report type: " + type);
         }
+        
+        // TC28: Empty Report - check if report has no sales data
+        if (report != null && report.getSummary() != null) {
+            String summary = report.getSummary();
+            // Check if totalSales is 0.0 or totalOrders is 0
+            if (summary.contains("\"totalSales\": 0.0") || summary.contains("\"totalOrders\": 0")) {
+                LOGGER.info("[Reporting] Generated empty report (no sales data found)");
+            }
+        }
+        
+        return report;
     }
 }

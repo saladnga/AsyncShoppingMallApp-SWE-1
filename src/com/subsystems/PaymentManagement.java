@@ -3,7 +3,7 @@ package com.subsystems;
 import com.broker.*;
 import java.util.concurrent.CompletableFuture;
 
-public class PaymentService implements Subsystems {
+public class PaymentManagement implements Subsystems {
 
     private AsyncMessageBroker broker;
 

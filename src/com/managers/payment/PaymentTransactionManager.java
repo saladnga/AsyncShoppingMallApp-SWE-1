@@ -11,10 +11,10 @@ public class PaymentTransactionManager {
         this.repo = repo;
     }
 
-    public void updateStatus(PaymentTransaction txn,
+    public void updateStatus(PaymentTransaction transaction,
             PaymentTransaction.Status newStatus) {
-        txn.setStatus(newStatus);
-        repo.update(txn);
+        transaction.setStatus(newStatus);
+        repo.update(transaction);
     }
 
     public PaymentTransaction getById(int id) {

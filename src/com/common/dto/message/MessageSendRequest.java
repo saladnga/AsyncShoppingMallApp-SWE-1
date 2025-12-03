@@ -1,10 +1,5 @@
 package com.common.dto.message;
 
-/**
- * DTO used when a user sends a message to staff or vice-versa.
- *
- * Immutable & thread-safe.
- */
 public final class MessageSendRequest {
 
     private final int senderId;

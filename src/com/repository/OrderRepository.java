@@ -5,18 +5,10 @@ import java.util.List;
 
 public interface OrderRepository {
 
-    // =============================
-    // CREATE ORDER
-    // =============================
-
     /**
      * Insert a new order and return generated ID.
      */
     int insert(Order order);
-
-    // =============================
-    // READ ORDER
-    // =============================
 
     /**
      * Load order basic info.
@@ -28,12 +20,8 @@ public interface OrderRepository {
      */
     List<Order> findByCustomer(int customerId);
 
-    // =============================
-    // UPDATE ORDER
-    // =============================
-
     /**
-     * Update the status (PLACED, SHIPPED, CANCELLED, DELIVERED).
+     * Update the status (PLACED, CANCELLED, DELIVERED).
      */
     void updateStatus(int orderId, Order.OrderStatus status);
 

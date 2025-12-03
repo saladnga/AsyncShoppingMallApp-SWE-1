@@ -1,9 +1,8 @@
 package com.common.dto.order;
 
 public class OrderCancelRequest {
-
     private final int orderId;
-    private final int userId; // who is requesting the cancellation
+    private final int userId;
 
     public OrderCancelRequest(int orderId, int userId) {
         this.orderId = orderId;

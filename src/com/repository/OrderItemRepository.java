@@ -5,7 +5,7 @@ import java.util.List;
 
 public interface OrderItemRepository {
 
-    /** Insert item into order_items table */
+    /** Insert item into table */
     void insert(OrderItem item);
 
     /** Load all items belonging to an order */

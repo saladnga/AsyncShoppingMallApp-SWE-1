@@ -5,15 +5,12 @@ import java.util.UUID;
 
 /**
  * Immutable event message used inside the broker.
- *
  * A Message contains:
  * - a unique ID (for message identity and tracking)
  * - the event type identifying what kind of event this is
- * - an optional payload containing domain data
+ * - a payload containing domain data
  * - a creation timestamp (epoch milliseconds)
  * - an optional correlationId for tracing related events across services
- *
- * Messages are immutable and therefore thread-safe.
  */
 
 public class Message {

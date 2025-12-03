@@ -1,16 +1,5 @@
 package com.common.dto.wishlist;
 
-/**
- * DTO used when user requests to view their wishlist.
- *
- * Sent with:
- * EventType.WISHLIST_VIEW_REQUESTED
- *
- * ViewWishlistManager will:
- * - load wishlist from DB
- * - publish WISHLIST_DETAILS_RETURNED
- */
-
 public class WishlistViewRequest {
 
     private final int userId;

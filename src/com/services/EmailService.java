@@ -2,7 +2,6 @@ package com.services;
 
 import com.broker.AsyncMessageBroker;
 import com.broker.EventType;
-import com.broker.Message;
 import com.entities.PaymentTransaction;
 
 import java.time.LocalDateTime;
@@ -17,6 +16,7 @@ import java.util.logging.Logger;
  * - Supports async receipt sending (used by Payment flow)
  * - Cleaned and aligned with your current project structure
  */
+
 public class EmailService {
 
     private static final Logger LOGGER = Logger.getLogger(EmailService.class.getName());

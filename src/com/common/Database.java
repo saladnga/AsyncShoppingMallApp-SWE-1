@@ -13,6 +13,7 @@ public class Database {
 
     /** Connect SQLite + load schema */
     public synchronized void connect(String url) {
+        // Database Connection Resilience - handle connection failures gracefully
         try {
             connection = DriverManager.getConnection(url);
 
@@ -25,15 +26,24 @@ public class Database {
 
             System.out.println("[Database] Connected to " + url);
 
-        } catch (Exception e) {
+        } catch (SQLException e) {
+            // Catch SQLException specifically
+            connection = null;
             System.err.println("[Database] Connection failed: " + e.getMessage());
+            System.err.println("[Database] Database unavailable. Please check if the database file exists.");
+            throw new RuntimeException("Database connection failed", e);
+        } catch (Exception e) {
+            // Catch other exceptions
+            connection = null;
+            System.err.println("[Database] Connection failed: " + e.getMessage());
+            throw new RuntimeException("Database connection failed", e);
         }
     }
 
     /** Load schema.sql from resources */
     private void runSchema() {
         try {
-            InputStream in = getClass().getResourceAsStream("/schema.sql");
+            InputStream in = getClass().getResourceAsStream("/com/resources/schema.sql");
             if (in == null) {
                 System.err.println("[Database] schema.sql not found.");
                 return;
@@ -80,20 +90,25 @@ public class Database {
 
     /** Query 1 row */
     public synchronized <T> T queryOne(String sql, ResultMapper<T> mapper, Object... params) {
-        if (connection == null)
+        // Database Connection Resilience - check connection before query
+        if (connection == null) {
+            System.err.println("[Database] queryOne failed: Database connection unavailable");
             return null;
+        }
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
-
             fillParams(ps, params);
-
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next())
                     return mapper.map(rs);
             }
 
         } catch (SQLException e) {
+            // Handle SQLException gracefully
             System.err.println("[Database] queryOne failed: " + e.getMessage());
+            // Don't crash - return null to indicate failure
+        } catch (Exception e) {
+            System.err.println("[Database] queryOne error: " + e.getMessage());
         }
         return null;
     }
@@ -102,8 +117,11 @@ public class Database {
     public synchronized <T> List<T> queryList(String sql, ResultMapper<T> mapper, Object... params) {
 
         List<T> list = new ArrayList<>();
-        if (connection == null)
+        // Database Connection Resilience - check connection before query
+        if (connection == null) {
+            System.err.println("[Database] queryList failed: Database connection unavailable");
             return list;
+        }
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             fillParams(ps, params);
@@ -114,7 +132,11 @@ public class Database {
             }
 
         } catch (SQLException e) {
+            // Handle SQLException gracefully
             System.err.println("[Database] queryList failed: " + e.getMessage());
+            // Return empty list instead of crashing
+        } catch (Exception e) {
+            System.err.println("[Database] queryList error: " + e.getMessage());
         }
 
         return list;

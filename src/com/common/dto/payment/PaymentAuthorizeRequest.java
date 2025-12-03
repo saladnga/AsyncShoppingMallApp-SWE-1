@@ -1,9 +1,5 @@
 package com.common.dto.payment;
 
-/**
- * DTO used to request payment authorization
- * from PaymentAuthorizationService.
- */
 public class PaymentAuthorizeRequest {
 
     private final int userId;

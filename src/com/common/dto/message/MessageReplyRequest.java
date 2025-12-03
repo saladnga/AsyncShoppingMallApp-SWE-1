@@ -1,11 +1,5 @@
 package com.common.dto.message;
 
-/**
- * DTO used when staff replies to a user's message.
- *
- * Immutable & thread-safe.
- */
-
 public final class MessageReplyRequest {
 
     private final int staffId;

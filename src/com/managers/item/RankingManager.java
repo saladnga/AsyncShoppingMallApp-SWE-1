@@ -9,6 +9,7 @@ import java.util.List;
 /**
  * Computes top ranked items (based on likes or sales).
  */
+
 public class RankingManager {
 
     private final ItemRankingRepository rankingRepo;

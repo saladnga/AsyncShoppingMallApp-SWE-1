@@ -19,29 +19,53 @@ public class BrokerUtils {
             EventType responseType, long timeoutMs) {
 
         CompletableFuture<T> fut = new CompletableFuture<>();
+        final long requestTime = System.currentTimeMillis();
+        final boolean[] responseReceived = new boolean[] { false };
 
         Listener listener = new Listener() {
             @Override
             public CompletableFuture<Void> onMessage(Message message) {
+                // Ignore if we already got a response (prevents stale events from completing
+                // the future)
+                synchronized (responseReceived) {
+                    if (responseReceived[0]) {
+                        System.out.println("[BrokerUtils] Ignoring duplicate/stale " + responseType + " event");
+                        return Listener.completed();
+                    }
+                    responseReceived[0] = true;
+                }
+
                 try {
                     Object p = message.getPayload();
+                    System.out.println("[BrokerUtils] Received " + responseType + " response: " +
+                            (p instanceof java.util.List<?> ? ((java.util.List<?>) p).size() + " items" : p));
                     fut.complete((T) p);
                 } catch (Throwable ex) {
+                    System.out.println("[BrokerUtils] Error processing response: " + ex.getMessage());
                     fut.complete(null);
                 }
                 return Listener.completed();
             }
         };
 
-        broker.registerListener(responseType, listener);
-
         try {
+            // Register listener BEFORE publishing to avoid race condition
+            broker.registerListener(responseType, listener);
+            System.out.println("[BrokerUtils] Registered listener and publishing " + requestType);
+
+            // Publish the request
             broker.publish(requestType, requestPayload);
-            return fut.get(timeoutMs, TimeUnit.MILLISECONDS);
+
+            // Wait for response
+            T result = fut.get(timeoutMs, TimeUnit.MILLISECONDS);
+            System.out.println("[BrokerUtils] Got result for " + responseType);
+            return result;
         } catch (Exception ex) {
+            System.out.println("[BrokerUtils] Timeout waiting for " + responseType + ": " + ex.getMessage());
             return null;
         } finally {
             broker.unregisterListener(responseType, listener);
+            System.out.println("[BrokerUtils] Unregistered listener for " + responseType);
         }
     }
 }

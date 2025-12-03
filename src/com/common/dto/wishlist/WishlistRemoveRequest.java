@@ -1,11 +1,5 @@
 package com.common.dto.wishlist;
 
-/**
- * DTO used when a user removes an item from their wishlist.
- *
- * Sent with:
- * EventType.WISHLIST_REMOVE_REQUESTED
- */
 public class WishlistRemoveRequest {
 
     private final int userId;

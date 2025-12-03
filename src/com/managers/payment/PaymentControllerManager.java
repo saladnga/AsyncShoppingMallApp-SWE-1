@@ -9,20 +9,20 @@ public class PaymentControllerManager {
 
     private final PaymentCardManager cardManager;
     private final PaymentAuthorizationManager authManager;
-    private final PaymentTransactionManager txnManager;
+    private final PaymentTransactionManager transactionManager;
     private final SendReceiptManager receiptManager;
     private final AsyncMessageBroker broker;
 
     public PaymentControllerManager(
             PaymentCardManager cardManager,
             PaymentAuthorizationManager authManager,
-            PaymentTransactionManager txnManager,
+            PaymentTransactionManager transactionManager,
             SendReceiptManager receiptManager,
             AsyncMessageBroker broker) {
 
         this.cardManager = cardManager;
         this.authManager = authManager;
-        this.txnManager = txnManager;
+        this.transactionManager = transactionManager;
         this.receiptManager = receiptManager;
         this.broker = broker;
     }
@@ -42,8 +42,8 @@ public class PaymentControllerManager {
     /**
      * Called after PAYMENT_AUTHORIZED event
      */
-    public void onPaymentAuthorized(PaymentTransaction txn) {
-        txnManager.updateStatus(txn, PaymentTransaction.Status.AUTHORIZED);
-        receiptManager.sendReceipt(txn);
+    public void onPaymentAuthorized(PaymentTransaction transaction) {
+        transactionManager.updateStatus(transaction, PaymentTransaction.Status.AUTHORIZED);
+        receiptManager.sendReceipt(transaction);
     }
 }

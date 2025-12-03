@@ -2,7 +2,7 @@ package com.common.dto.payment;
 
 public class PaymentCardDataRequest {
     private final int userId;
-    private final String cardType; // VISA, MASTER, AMEX...
+    private final String cardType;
 
     public PaymentCardDataRequest(int userId, String cardType) {
         this.userId = userId;

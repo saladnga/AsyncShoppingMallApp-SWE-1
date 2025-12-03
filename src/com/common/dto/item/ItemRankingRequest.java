@@ -2,16 +2,9 @@ package com.common.dto.item;
 
 /**
  * DTO used when the system or user requests ranked items.
- *
- * Sent with:
- * EventType.ITEM_RANKING_REQUESTED
- *
  * RankingManager will:
- * - compute ranking based on popularity, likes, sales, views, stock, etc.
- * - optionally filter by category or limit result size
+ * - compute ranking based on likes
  * - publish ITEM_RANKING_RETURNED or ITEM_LIST_RETURNED
- *
- * This DTO is immutable and thread-safe.
  */
 
 public class ItemRankingRequest {

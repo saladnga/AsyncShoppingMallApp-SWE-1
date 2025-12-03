@@ -3,7 +3,7 @@ package com.common.dto.report;
 public class DailyReportRequest {
 
     private final int requesterId;
-    private final long date; // Specific date for the report (optional)
+    private final long date;
 
     public DailyReportRequest(int requesterId) {
         this.requesterId = requesterId;

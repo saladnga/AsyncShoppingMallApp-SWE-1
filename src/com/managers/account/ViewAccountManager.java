@@ -6,6 +6,7 @@ import com.repository.UserRepository;
 /**
  * Loads account info and handles permission rules.
  */
+
 public class ViewAccountManager {
 
     private final UserRepository repo;

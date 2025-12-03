@@ -66,6 +66,10 @@ public class UserMessage {
         this.id = id;
     }
 
+    public void setTimeStamp(long timestamp) {
+        this.timestamp = timestamp;
+    }
+
     public void setSenderId(int senderId) {
         this.senderId = senderId;
     }

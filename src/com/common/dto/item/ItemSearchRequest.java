@@ -2,11 +2,11 @@ package com.common.dto.item;
 
 public class ItemSearchRequest {
 
-    private final String keyword; // required: search text
-    private final String category; // optional
-    private final Double minPrice; // optional
-    private final Double maxPrice; // optional
-    private final String sortOrder; // optional: "PRICE_ASC", "PRICE_DESC", "POPULARITY", etc.
+    private final String keyword;
+    private final String category;
+    private final Double minPrice; 
+    private final Double maxPrice; 
+    private final String sortOrder; 
 
     public ItemSearchRequest(
             String keyword,

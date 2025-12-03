@@ -6,8 +6,9 @@ import com.broker.Listener;
 import com.broker.Message;
 import com.common.dto.item.ItemEditRequest;
 import com.common.dto.item.ItemUploadRequest;
+import com.common.dto.item.ItemSearchRequest;
+import com.common.dto.item.ItemLikeRequest;
 import com.entities.Item;
-import com.entities.Wishlist;
 import com.entities.LikeRecord;
 import com.entities.ItemRanking;
 import com.repository.ItemRepository;
@@ -19,23 +20,20 @@ import java.util.concurrent.CompletableFuture;
  * ItemManagement subsystem
  * Handles:
  * - Customer Browsing
- * - Wishlist operations
  * - Likes
  * - Item uploads/edits/removals (Admin)
  * - Ranking computations
  * - Purchase trigger (PurchaseManager is inside OrderManagement, but we
  * coordinate)
- *
- * This class is the "ItemCoordinator" from the UML.
  */
+
 public class ItemManagement implements Subsystems {
 
     private AsyncMessageBroker broker;
 
     private final ItemRepository repo;
 
-    // Temporary stores for wishlist/likes kept locally where no repo exists yet
-    private Map<Integer, Wishlist> wishlistDB = new HashMap<>();
+    // Temporary stores for likes kept locally where no repo exists yet
     private Map<Integer, LikeRecord> likeDB = new HashMap<>();
     private Map<Integer, ItemRanking> rankingDB = new HashMap<>();
 
@@ -50,9 +48,6 @@ public class ItemManagement implements Subsystems {
     private final Listener editListener = this::handleEdit;
     private final Listener refillListener = this::handleRefill;
     private final Listener removeListener = this::handleRemove;
-    private final Listener wishlistAddListener = this::handleWishlistAdd;
-    private final Listener wishlistRemoveListener = this::handleWishlistRemove;
-    private final Listener wishlistViewListener = this::handleWishlistView;
     private final Listener likeListener = this::handleLike;
 
     @Override
@@ -67,10 +62,6 @@ public class ItemManagement implements Subsystems {
         broker.registerListener(EventType.ITEM_EDIT_REQUESTED, editListener);
         broker.registerListener(EventType.ITEM_REFILL_REQUESTED, refillListener);
         broker.registerListener(EventType.ITEM_REMOVE_REQUESTED, removeListener);
-
-        broker.registerListener(EventType.WISHLIST_ADD_REQUESTED, wishlistAddListener);
-        broker.registerListener(EventType.WISHLIST_REMOVE_REQUESTED, wishlistRemoveListener);
-        broker.registerListener(EventType.WISHLIST_VIEW_REQUESTED, wishlistViewListener);
 
         broker.registerListener(EventType.ITEM_LIKE_REQUESTED, likeListener);
 
@@ -87,10 +78,6 @@ public class ItemManagement implements Subsystems {
         broker.unregisterListener(EventType.ITEM_REFILL_REQUESTED, refillListener);
         broker.unregisterListener(EventType.ITEM_REMOVE_REQUESTED, removeListener);
 
-        broker.unregisterListener(EventType.WISHLIST_ADD_REQUESTED, wishlistAddListener);
-        broker.unregisterListener(EventType.WISHLIST_REMOVE_REQUESTED, wishlistRemoveListener);
-        broker.unregisterListener(EventType.WISHLIST_VIEW_REQUESTED, wishlistViewListener);
-
         broker.unregisterListener(EventType.ITEM_LIKE_REQUESTED, likeListener);
 
         System.out.println("[ItemManagement] Shutdown complete");
@@ -101,13 +88,16 @@ public class ItemManagement implements Subsystems {
     }
 
     // ================================================================
-    // BROWSE MANAGER (UML)
+    // BROWSE MANAGER
     // ================================================================
     private CompletableFuture<Void> handleBrowse(Message message) {
         return CompletableFuture.runAsync(() -> {
             System.out.println("[ItemManagement] Browsing all items...");
 
             List<Item> items = repo.findAll();
+
+            // Sort by like count (descending) - most liked items first
+            items.sort((a, b) -> Integer.compare(b.getLikeCount(), a.getLikeCount()));
 
             broker.publish(EventType.ITEM_LIST_RETURNED, items);
         });
@@ -116,12 +106,26 @@ public class ItemManagement implements Subsystems {
     private CompletableFuture<Void> handleSearch(Message message) {
         return CompletableFuture.runAsync(() -> {
 
-            String term = (String) message.getPayload();
-            System.out.println("[ItemManagement] Searching for: " + term);
+            Object payload = message.getPayload();
+            String term = null;
+
+            if (payload instanceof ItemSearchRequest req) {
+                term = req.getKeyword();
+            } else if (payload instanceof String) {
+                term = (String) payload;
+            }
+
+            System.out.println("[ItemManagement] Searching for: " + (term != null ? term : ""));
 
             List<Item> results = repo.searchByKeyword(term == null ? "" : term);
 
-            broker.publish(EventType.ITEM_LIST_RETURNED, results);
+            // TC14: Search Empty - handle no results
+            if (results == null || results.isEmpty()) {
+                System.out.println("[ItemManagement] No matches found for: " + (term != null ? term : ""));
+                broker.publish(EventType.ITEM_LIST_RETURNED, List.of());
+            } else {
+                broker.publish(EventType.ITEM_LIST_RETURNED, results);
+            }
         });
     }
 
@@ -138,13 +142,34 @@ public class ItemManagement implements Subsystems {
                 return;
             }
 
-            Item item = new Item(0, req.getName(), req.getDescription(), req.getPrice(), req.getStock(), 0);
-            int id = repo.insert(item);
-            if (id > 0) {
-                item.setId(id);
-                broker.publish(EventType.ITEM_UPDATE_SUCCESS, item);
-            } else {
-                broker.publish(EventType.ITEM_UPDATE_SUCCESS, "Upload failed");
+            // Invalid Item Upload - validate negative numbers
+            if (req.getPrice() < 0) {
+                broker.publish(EventType.ITEM_UPDATE_SUCCESS, "Invalid values: Price cannot be negative");
+                return;
+            }
+
+            if (req.getStock() < 0) {
+                broker.publish(EventType.ITEM_UPDATE_SUCCESS, "Invalid values: Stock cannot be negative");
+                return;
+            }
+
+            if (req.getName() == null || req.getName().isBlank()) {
+                broker.publish(EventType.ITEM_UPDATE_SUCCESS, "Invalid values: Item name is required");
+                return;
+            }
+
+            try {
+                Item item = new Item(0, req.getName(), req.getDescription(), req.getPrice(), req.getStock(), 0);
+                int id = repo.insert(item);
+                if (id > 0) {
+                    item.setId(id);
+                    broker.publish(EventType.ITEM_UPDATE_SUCCESS, item);
+                    System.out.println("[ItemManagement] Item uploaded: " + item.getName() + " (ID: " + id + ")");
+                } else {
+                    broker.publish(EventType.ITEM_UPDATE_SUCCESS, "Upload failed: Database error");
+                }
+            } catch (Exception e) {
+                broker.publish(EventType.ITEM_UPDATE_SUCCESS, "Upload failed: " + e.getMessage());
             }
         });
     }
@@ -225,58 +250,52 @@ public class ItemManagement implements Subsystems {
     }
 
     // ================================================================
-    // WISHLIST MANAGER
-    // ================================================================
-    private CompletableFuture<Void> handleWishlistAdd(Message message) {
-        return CompletableFuture.runAsync(() -> {
-
-            Wishlist wl = (Wishlist) message.getPayload();
-            wishlistDB.put(wl.getId(), wl);
-
-            broker.publish(EventType.WISHLIST_ADD_SUCCESS, wl);
-            System.out.println("[ItemManagement] Wishlist updated");
-        });
-    }
-
-    private CompletableFuture<Void> handleWishlistRemove(Message message) {
-        return CompletableFuture.runAsync(() -> {
-
-            int id = (Integer) message.getPayload();
-
-            wishlistDB.remove(id);
-            broker.publish(EventType.WISHLIST_REMOVE_SUCCESS, id);
-        });
-    }
-
-    private CompletableFuture<Void> handleWishlistView(Message message) {
-        return CompletableFuture.runAsync(() -> {
-
-            int userId = (Integer) message.getPayload();
-
-            List<Wishlist> list = new ArrayList<>();
-            for (Wishlist wl : wishlistDB.values()) {
-                if (wl.getCustomerId() == userId)
-                    list.add(wl);
-            }
-
-            broker.publish(EventType.WISHLIST_DETAILS_RETURNED, list);
-        });
-    }
-
-    // ================================================================
     // LIKE MANAGER
     // ================================================================
     private CompletableFuture<Void> handleLike(Message message) {
         return CompletableFuture.runAsync(() -> {
             Object payload = message.getPayload();
-            if (!(payload instanceof Integer itemId)) {
+
+            int userId = -1;
+            int itemId = -1;
+            
+            // Handle both ItemLikeRequest and Integer for backward compatibility
+            if (payload instanceof com.common.dto.item.ItemLikeRequest req) {
+                userId = req.getUserId();
+                itemId = req.getItemId();
+            } else if (payload instanceof Integer) {
+                itemId = (Integer) payload;
+                // Legacy support - if only itemId provided, we can't check user
+                broker.publish(EventType.ITEM_UPDATE_SUCCESS, "Like request needs user ID");
+                return;
+            } else {
                 broker.publish(EventType.ITEM_UPDATE_SUCCESS, "Invalid like payload");
                 return;
             }
 
-            // We don't have user info here; just increment like count on item
-            repo.incrementLikeCount(itemId);
-            broker.publish(EventType.ITEM_UPDATE_SUCCESS, "Like recorded");
+            try {
+                // Check if user already liked this item
+                if (repo.existsLike(userId, itemId)) {
+                    broker.publish(EventType.ITEM_UPDATE_SUCCESS, "Item already liked");
+                    return;
+                }
+
+                // Insert like record and increment count
+                repo.insertLike(userId, itemId);
+
+                // Get updated item to return with new like count
+                Item item = repo.findById(itemId);
+                if (item != null) {
+                    broker.publish(EventType.ITEM_UPDATE_SUCCESS, item);
+                    System.out.println(
+                            "[ItemManagement] Item #" + itemId + " liked. New count: " + item.getLikeCount());
+                } else {
+                    broker.publish(EventType.ITEM_UPDATE_SUCCESS, "Like recorded");
+                }
+            } catch (Exception e) {
+                broker.publish(EventType.ITEM_UPDATE_SUCCESS, "Like failed: " + e.getMessage());
+                System.out.println("[ItemManagement] Like error: " + e.getMessage());
+            }
         });
     }
 }

@@ -10,16 +10,16 @@ import com.repository.PaymentTransactionRepository;
 public class PaymentAuthorizationManager {
 
     private final PaymentCardRepository cardRepo;
-    private final PaymentTransactionRepository txnRepo;
+    private final PaymentTransactionRepository transactionRepo;
     private final AsyncMessageBroker broker;
 
     public PaymentAuthorizationManager(
             PaymentCardRepository cardRepo,
-            PaymentTransactionRepository txnRepo,
+            PaymentTransactionRepository transactionRepo,
             AsyncMessageBroker broker) {
 
         this.cardRepo = cardRepo;
-        this.txnRepo = txnRepo;
+        this.transactionRepo = transactionRepo;
         this.broker = broker;
     }
 
@@ -50,7 +50,7 @@ public class PaymentAuthorizationManager {
                 card.getCardType(), // paymentMethod
                 PaymentTransaction.Status.AUTHORIZED);
 
-        txnRepo.save(txn);
+        transactionRepo.save(txn);
         broker.publish(EventType.PAYMENT_AUTHORIZED, txn);
     }
 }

@@ -27,7 +27,7 @@ public class CeoUI {
 
         switch (input) {
             case "1" -> viewSalesReport(scanner, broker);
-            case "2" -> Main.currentUser = null;
+            case "3" -> Main.currentUser = null;
             case "Q", "q" -> System.exit(0);
             default -> {
                 System.out.println(UIHelper.RED + "Invalid option!" + UIHelper.RESET);
@@ -35,7 +35,6 @@ public class CeoUI {
             }
         }
     }
-
 
     // ============================================================
     // VIEW SALES REPORTS
@@ -98,4 +97,5 @@ public class CeoUI {
             }
         }
     }
+
 }

@@ -3,7 +3,6 @@ package com.services;
 import com.broker.AsyncMessageBroker;
 import com.broker.EventType;
 import com.broker.Listener;
-import com.broker.Message;
 import com.common.dto.payment.PaymentAuthorizeRequest;
 
 import java.util.Random;
@@ -24,6 +23,7 @@ import java.util.logging.Logger;
  *
  * NO RECEIPT EVENTS HERE — that belongs to EmailService.
  */
+
 public class PaymentAuthorizationService {
 
     private static final Logger LOGGER = Logger.getLogger(PaymentAuthorizationService.class.getName());

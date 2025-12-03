@@ -21,7 +21,7 @@ public interface PaymentCardRepository {
 
     /** Manager calls setDefault(cardId) */
     default void setDefaultCard(int cardId) {
-        throw new UnsupportedOperationException("setDefaultCard(int) must be implemented");
+        throw new UnsupportedOperationException("setDefaultCard must be implemented");
     }
 
     // ================================

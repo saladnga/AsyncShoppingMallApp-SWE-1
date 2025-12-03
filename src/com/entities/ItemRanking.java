@@ -3,6 +3,7 @@ package com.entities;
 /**
  * Represents a ranked item (for Top Ranking features)
  */
+
 public class ItemRanking {
 
     private int itemId;

@@ -1,13 +1,6 @@
 package com.common.dto.message;
 
-/**
- * DTO used when a user or staff requests to view message history.
- *
- * Immutable & thread-safe.
- */
-
 public final class MessageHistoryRequest {
-
     private final int userId;
     private final int staffId;
 

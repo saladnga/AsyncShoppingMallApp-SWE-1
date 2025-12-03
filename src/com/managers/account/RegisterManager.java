@@ -33,7 +33,7 @@ public class RegisterManager {
 
         if (email.isEmpty())
             return Optional.of("Email is required");
-        
+
         if (password.isEmpty())
             return Optional.of("Password is required");
 
@@ -60,6 +60,10 @@ public class RegisterManager {
 
         if (!password.matches(".*[^A-Za-z0-9].*"))
             return Optional.of("Password must include a special character");
+
+        // Password Regex Boundaries - specific validation messages
+        // Note: The regex checks above already cover all cases, but we can make
+        // messages more specific
 
         if (userRepo.existsUsername(username) || userRepo.existsEmail(email)) {
             return Optional.of("Username or email already in use");

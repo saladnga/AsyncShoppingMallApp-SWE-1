@@ -64,7 +64,12 @@ public class UIHelper {
     public static void pause() {
         System.out.println("\nPress ENTER to continue...");
         try {
+            // Read single character instead of using Scanner
             System.in.read();
+            // Clear any remaining characters in buffer
+            while (System.in.available() > 0) {
+                System.in.read();
+            }
         } catch (Exception ignored) {
         }
     }

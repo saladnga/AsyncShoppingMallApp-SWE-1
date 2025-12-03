@@ -23,7 +23,6 @@ public class ViewWishlistManager {
      */
     public List<String> viewWishlist(int userId) {
 
-        // Corrected method: findByCustomerId()
         List<Wishlist> list = wishlistRepo.findByCustomerId(userId);
 
         List<String> results = new ArrayList<>();

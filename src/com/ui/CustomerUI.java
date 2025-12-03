@@ -9,9 +9,10 @@ import com.common.dto.order.OrderCreateRequest;
 import com.common.dto.order.OrderCreateRequest.OrderItemRequest;
 import com.common.dto.wishlist.WishlistAddRequest;
 import com.common.dto.wishlist.WishlistRemoveRequest;
-import com.common.dto.wishlist.WishlistViewRequest;
+import com.common.dto.item.ItemLikeRequest;
 import com.entities.Item;
 import com.entities.Order;
+import com.entities.PaymentCard;
 import com.entities.User;
 
 import java.time.Instant;
@@ -37,7 +38,7 @@ public class CustomerUI {
                         "3. View Wishlist",
                         "4. View My Orders",
                         "5. Send Message to Staff",
-                        "6. View Conversations",
+                        "6. View Notifications",
                         "7. View Account",
                         "8. Logout",
                         "Q. Quit"));
@@ -51,8 +52,8 @@ public class CustomerUI {
             case "3" -> viewWishlist(scanner, broker);
             case "4" -> viewOrders(scanner, broker);
             case "5" -> sendMessage(scanner, broker);
-            case "6" -> viewConversations(broker);
-            case "7" -> viewAccount(broker);
+            case "6" -> showNotificationMenu(scanner, broker);
+            case "7" -> viewAccount(scanner, broker);
             case "8" -> Main.currentUser = null;
             case "Q", "q" -> System.exit(0);
             default -> System.out.println(UIHelper.RED + "Invalid option!" + UIHelper.RESET);
@@ -99,7 +100,7 @@ public class CustomerUI {
                     if (!requireLoggedInForAction("add items to a wishlist")) {
                         continue;
                     }
-                    System.out.print("Enter ItemID to add to Wishlist: ");
+                    System.out.print("Enter Item ID to add to Wishlist: ");
                     String idInput = scanner.nextLine().trim();
                     Integer itemId = parseItemId(idInput);
                     if (itemId == null)
@@ -118,6 +119,7 @@ public class CustomerUI {
                             UIHelper.GREEN + "Added '" + selected.getName() + "' to your wishlist." + UIHelper.RESET);
                     UIHelper.pause();
                 }
+
                 case "2" -> {
                     if (!requireLoggedInForAction("like an item")) {
                         continue;
@@ -134,7 +136,8 @@ public class CustomerUI {
                         continue;
                     }
 
-                    broker.publish(EventType.ITEM_LIKE_REQUESTED, itemId);
+                    broker.publish(EventType.ITEM_LIKE_REQUESTED,
+                            new ItemLikeRequest(Main.currentUser.getId(), itemId));
                     System.out.println(UIHelper.GREEN + "You liked '" + selected.getName() + "'." + UIHelper.RESET);
                     UIHelper.pause();
                 }
@@ -142,7 +145,7 @@ public class CustomerUI {
                     if (!requireLoggedInForAction("purchase an item")) {
                         continue;
                     }
-                    boolean completed = purchase(scanner, broker);
+                    purchase(scanner, broker);
                     UIHelper.pause();
                     return;
                 }
@@ -155,15 +158,16 @@ public class CustomerUI {
     }
 
     private static boolean purchase(Scanner scanner, AsyncMessageBroker broker) {
-        System.out.print("Enter ItemID to purchase: ");
+        System.out.print("Enter Item ID to purchase: ");
         int itemId = Integer.parseInt(scanner.nextLine());
 
         // Fetch item info
         List<Item> items = BrokerUtils.requestOnce(broker, EventType.ITEM_BROWSE_REQUESTED, null,
                 EventType.ITEM_LIST_RETURNED, 3000);
         Item item = null;
-        if (items != null)
+        if (items != null) {
             item = items.stream().filter(i -> i.getId() == itemId).findFirst().orElse(null);
+        }
 
         if (item == null) {
             System.out.println(UIHelper.RED + "Invalid item." + UIHelper.RESET);
@@ -281,9 +285,11 @@ public class CustomerUI {
                     if (!requireLoggedInForAction("add items to a wishlist")) {
                         continue;
                     }
-                    System.out.print("Enter ItemID to add to Wishlist: ");
+
+                    System.out.print("Enter Item ID to add to Wishlist: ");
                     String idInput = scanner.nextLine().trim();
                     Integer itemId = parseItemId(idInput);
+
                     if (itemId == null)
                         continue;
 
@@ -304,7 +310,7 @@ public class CustomerUI {
                     if (!requireLoggedInForAction("like an item")) {
                         continue;
                     }
-                    System.out.print("Enter ItemID to like: ");
+                    System.out.print("Enter Item ID to like: ");
                     String idInput = scanner.nextLine().trim();
                     Integer itemId = parseItemId(idInput);
                     if (itemId == null)
@@ -324,7 +330,7 @@ public class CustomerUI {
                     if (!requireLoggedInForAction("purchase an item")) {
                         continue;
                     }
-                    boolean completed = purchase(scanner, broker);
+                    purchase(scanner, broker);
                     UIHelper.pause();
                     return;
                 }
@@ -340,8 +346,7 @@ public class CustomerUI {
         if (!requireLoggedInForAction("view wishlist"))
             return;
 
-        List<?> wl = BrokerUtils.requestOnce(broker, EventType.WISHLIST_VIEW_REQUESTED, 
-                new WishlistViewRequest(Main.currentUser.getId()),
+        List<?> wl = BrokerUtils.requestOnce(broker, EventType.WISHLIST_VIEW_REQUESTED, Main.currentUser.getId(),
                 EventType.WISHLIST_DETAILS_RETURNED, 3000);
 
         if (wl == null || wl.isEmpty()) {
@@ -389,12 +394,12 @@ public class CustomerUI {
 
             switch (choice) {
                 case "1" -> {
-                    boolean completed = purchase(scanner, broker);
+                    purchase(scanner, broker);
                     UIHelper.pause();
                     return;
                 }
                 case "2" -> {
-                    System.out.print("Enter ItemID to remove from Wishlist: ");
+                    System.out.print("Enter Item ID to remove from Wishlist: ");
                     String idInput = scanner.nextLine().trim();
                     Integer itemId = parseItemId(idInput);
                     if (itemId == null)
@@ -416,6 +421,11 @@ public class CustomerUI {
     }
 
     public static void viewOrders(Scanner scanner, AsyncMessageBroker broker) {
+        viewOrders(scanner, broker, null);
+    }
+
+    private static void viewOrders(Scanner scanner, AsyncMessageBroker broker,
+            com.repository.OrderRepository orderRepo) {
         if (!requireLoggedInForAction("view orders"))
             return;
 
@@ -449,7 +459,7 @@ public class CustomerUI {
 
             switch (choice) {
                 case "1" -> {
-                    System.out.print("Enter OrderID to view details: ");
+                    System.out.print("Enter Order ID to view details: ");
                     int orderId = scanner.nextInt();
                     scanner.nextLine();
 
@@ -463,7 +473,7 @@ public class CustomerUI {
                         continue;
                     }
 
-                    showOrderDetails(order);
+                    showOrderDetails(order, broker, orderRepo);
                     return;
                 }
                 case "2" -> {
@@ -474,7 +484,8 @@ public class CustomerUI {
         }
     }
 
-    private static void showOrderDetails(Order order) {
+    private static void showOrderDetails(Order order, AsyncMessageBroker broker,
+            com.repository.OrderRepository orderRepo) {
         List<String> detailLines = new ArrayList<>();
         detailLines.add(String.format("Order ID: #%d", order.getId()));
         detailLines.add(String.format("Order Date: %s", formatOrderDate(order.getOrderDate())));
@@ -509,19 +520,41 @@ public class CustomerUI {
                     printedItems = true;
                 }
             }
-        } catch (NoSuchMethodException nsme) {
-            // no getItems() - ignore
+        } catch (NoSuchMethodException name) {
         } catch (Exception e) {
-            // reflection failed; fall back
         }
 
         if (!printedItems) {
-            detailLines.add("  (Item details not available)");
+            detailLines.add("(Item details not available)");
         }
 
         detailLines.add(String.format("Total Amount: $%.2f", order.getTotalAmount()));
 
+        // Allow customer to change status from PLACED to DELIVERED
+        if (Order.OrderStatus.PLACED.equals(order.getStatus())) {
+            detailLines.add("");
+            detailLines.add("[Order is PLACED - you can mark it as DELIVERED]");
+        }
+
         UIHelper.box(UIHelper.color("ORDER DETAILS", UIHelper.GREEN), detailLines);
+
+        // Allow status change after displaying details
+        if (Order.OrderStatus.PLACED.equals(order.getStatus())) {
+            System.out.println(UIHelper.YELLOW + "Mark order as DELIVERED? (y/n): " + UIHelper.RESET);
+            Scanner statusScanner = new Scanner(System.in);
+            String response = statusScanner.nextLine().trim().toLowerCase();
+            if ("y".equals(response) || "yes".equals(response)) {
+                order.setStatus(Order.OrderStatus.DELIVERED);
+                // Persist status change to database
+                if (orderRepo != null) {
+                    orderRepo.updateStatus(order.getId(), Order.OrderStatus.DELIVERED);
+                } else if (broker != null) {
+                    broker.publish(EventType.ORDER_STATUS_UPDATE_REQUESTED, order);
+                }
+                System.out.println(UIHelper.GREEN + "Order marked as DELIVERED!" + UIHelper.RESET);
+            }
+        }
+
         UIHelper.pause();
     }
 
@@ -536,7 +569,7 @@ public class CustomerUI {
 
         System.out.print("Subject: ");
         String subject = scanner.nextLine();
-        System.out.print("Message: ");
+        System.out.print("Your Message: ");
         String msg = scanner.nextLine();
 
         // Send to all staff (recipientId = -1 indicates broadcast to all staff)
@@ -547,38 +580,33 @@ public class CustomerUI {
         UIHelper.pause();
     }
 
-    private static void viewConversations(AsyncMessageBroker broker) {
-        // Request conversation list and render it locally to avoid duplicate prints
-        // from Main
-        List<com.entities.Conversation> convs = BrokerUtils.requestOnce(
-                broker,
-                EventType.CONVERSATION_LIST_REQUESTED,
-                new ConversationListRequest(Main.currentUser.getId()),
-                EventType.CONVERSATION_LIST_RETURNED,
-                3000);
+    private static void showNotificationMenu(Scanner scanner, AsyncMessageBroker broker) {
+        System.out.println(UIHelper.CYAN + "=== Notifications ===" + UIHelper.RESET);
 
-        if (convs == null || convs.isEmpty()) {
-            System.out.println(UIHelper.YELLOW + "No conversations found." + UIHelper.RESET);
+        // Get notifications from Main.notifications
+        List<String> notifications = Main.getNotifications();
+
+        if (notifications == null || notifications.isEmpty()) {
+            System.out.println(UIHelper.YELLOW + "(No notifications)" + UIHelper.RESET);
             UIHelper.pause();
             return;
         }
 
-        System.out.println("=== Conversations ===");
-        for (com.entities.Conversation conv : convs) {
-            if (Main.currentUser.getRole() == User.Role.CUSTOMER) {
-                System.out.println("With: " + conv.getStaffName()
-                        + " | Last: " + conv.getLastMessage()
-                        + " | Unread: " + conv.getUnreadCount());
-            } else {
-                System.out.println("Customer ID: " + conv.getCustomerId()
-                        + " (" + conv.getCustomerName() + ")"
-                        + " | Last: " + conv.getLastMessage()
-                        + " | Unread: " + conv.getUnreadCount());
-            }
+        for (String notification : notifications) {
+            System.out.println(UIHelper.GREEN + "• " + notification + UIHelper.RESET);
         }
+
+        System.out.println();
+        System.out.println("Press 'c' to clear notifications, or Enter to continue...");
+        String input = scanner.nextLine().trim().toLowerCase();
+        if ("c".equals(input)) {
+            Main.clearNotifications();
+            System.out.println(UIHelper.YELLOW + "Notifications cleared." + UIHelper.RESET);
+        }
+        UIHelper.pause();
     }
 
-    public static void viewAccount(AsyncMessageBroker broker) {
+    public static void viewAccount(Scanner scanner, AsyncMessageBroker broker) {
         if (Main.currentUser == null) {
             System.out.println(UIHelper.RED + "No user is currently logged in." + UIHelper.RESET);
             UIHelper.pause();
@@ -601,7 +629,196 @@ public class CustomerUI {
                 "Address: " + safeValue(user.getAddress()));
 
         UIHelper.box(UIHelper.color("ACCOUNT INFORMATION", UIHelper.CYAN), info);
-        UIHelper.pause();
+
+        // Display payment cards from database
+        List<String> cardLines = new ArrayList<>();
+
+        // Request payment cards for current user
+        List<PaymentCard> cards = BrokerUtils.requestOnce(broker, EventType.PAYMENT_CARD_LIST_REQUESTED,
+                Main.currentUser.getId(), EventType.PAYMENT_CARD_LIST_RETURNED, 3000);
+
+        if (cards == null || cards.isEmpty()) {
+            cardLines.add("(No payment cards available)");
+            cardLines.add("Use add card to register one)");
+        } else {
+            for (PaymentCard card : cards) {
+                cardLines.add(String.format("%s **** **** **** %s",
+                        card.getCardType(),
+                        card.getLast4Digits()));
+                cardLines.add(String.format("Holder: %s | Expires: %s",
+                        card.getCardHolderName(),
+                        card.getExpiryDate()));
+                cardLines.add("");
+            }
+        }
+
+        UIHelper.box(UIHelper.color("PAYMENT CARDS", UIHelper.CYAN), cardLines);
+
+        // Actions menu
+        while (true) {
+            System.out.println(UIHelper.YELLOW + "Actions:" + UIHelper.RESET);
+            System.out.println("1. Edit Account");
+            System.out.println("2. Back to main view");
+            System.out.print(UIHelper.YELLOW + "Select an option: " + UIHelper.RESET);
+            String act = scanner.nextLine().trim();
+
+            switch (act) {
+                case "1" -> editAccountMenu(scanner, broker, user);
+                case "2" -> {
+                    return;
+                }
+                default -> System.out.println(UIHelper.RED + "Invalid Input" + UIHelper.RESET);
+            }
+        }
+    }
+
+    private static String maskCardNumber(String number) {
+        if (number == null)
+            return "N/A";
+        String digits = number.replaceAll("\\s+", "");
+        if (digits.length() <= 4)
+            return digits;
+        String last4 = digits.substring(digits.length() - 4);
+        return "**** **** **** " + last4;
+    }
+
+    private static void editAccountMenu(Scanner scanner, AsyncMessageBroker broker, User currentDisplayUser) {
+        while (true) {
+            System.out.println(UIHelper.YELLOW + "Edit Account:" + UIHelper.RESET);
+            System.out.println("1. Edit username");
+            System.out.println("2. Edit phone");
+            System.out.println("3. Edit Address");
+            System.out.println("4. Edit password");
+            System.out.println("5. Edit payment card");
+            System.out.println("6. Add payment card");
+            System.out.println("7. Back");
+            System.out.print(UIHelper.YELLOW + "Select an option: " + UIHelper.RESET);
+            String c = scanner.nextLine().trim();
+
+            switch (c) {
+                case "1" -> {
+                    System.out.print("New username: ");
+                    String v = scanner.nextLine().trim();
+                    broker.publish(EventType.ACCOUNT_EDIT_REQUESTED, new com.common.dto.account.AccountEditRequest(
+                            currentDisplayUser.getId(), v, null, null, null, null));
+                    // Wait for update success
+                    User updated = BrokerUtils.requestOnce(broker, EventType.ACCOUNT_EDIT_REQUESTED, null,
+                            EventType.ACCOUNT_UPDATE_SUCCESS, 3000);
+                    if (updated != null) {
+                        System.out.println(UIHelper.GREEN + "Username updated successfully!" + UIHelper.RESET);
+                        UIHelper.pause();
+                        // Refresh account display
+                        viewAccount(scanner, broker);
+                        return;
+                    } else {
+                        System.out.println(UIHelper.RED + "Username update failed." + UIHelper.RESET);
+                    }
+                }
+                case "2" -> {
+                    System.out.print("New phone: ");
+                    String v = scanner.nextLine().trim();
+                    broker.publish(EventType.ACCOUNT_EDIT_REQUESTED, new com.common.dto.account.AccountEditRequest(
+                            currentDisplayUser.getId(), null, null, v, null, null));
+                    // Wait for update success
+                    User updated = BrokerUtils.requestOnce(broker, EventType.ACCOUNT_EDIT_REQUESTED, null,
+                            EventType.ACCOUNT_UPDATE_SUCCESS, 3000);
+                    if (updated != null) {
+                        System.out.println(UIHelper.GREEN + "Phone updated successfully!" + UIHelper.RESET);
+                        UIHelper.pause();
+                        // Refresh account display
+                        viewAccount(scanner, broker);
+                        return;
+                    } else {
+                        System.out.println(UIHelper.RED + "Phone update failed." + UIHelper.RESET);
+                    }
+                }
+                case "3" -> {
+                    System.out.print("New address: ");
+                    String v = scanner.nextLine().trim();
+                    broker.publish(EventType.ACCOUNT_EDIT_REQUESTED, new com.common.dto.account.AccountEditRequest(
+                            currentDisplayUser.getId(), null, null, null, v, null));
+                    // Wait for update success
+                    User updated = BrokerUtils.requestOnce(broker, EventType.ACCOUNT_EDIT_REQUESTED, null,
+                            EventType.ACCOUNT_UPDATE_SUCCESS, 3000);
+                    if (updated != null) {
+                        System.out.println(UIHelper.GREEN + "Address updated successfully!" + UIHelper.RESET);
+                        UIHelper.pause();
+                        // Refresh account display
+                        viewAccount(scanner, broker);
+                        return;
+                    } else {
+                        System.out.println(UIHelper.RED + "Address update failed." + UIHelper.RESET);
+                    }
+                }
+                case "4" -> {
+                    // Edit password: verify current password first
+                    System.out.print("Current password: ");
+                    String currentPw = Main.readPasswordHidden();
+
+                    // Publish login request to verify password
+                    broker.publish(EventType.USER_LOGIN_REQUEST,
+                            new com.common.dto.auth.LoginRequest(currentDisplayUser.getUsername(), currentPw));
+                    // Wait for login response
+                    Object loginResp = BrokerUtils.requestOnce(broker, EventType.USER_LOGIN_REQUEST, null,
+                            EventType.USER_LOGIN_SUCCESS, 2000);
+
+                    if (loginResp != null) {
+                        // Password is correct, ask for new password
+                        System.out.print("New password: ");
+                        String newPw = Main.readPasswordHidden();
+                        System.out.print("Confirm new password: ");
+                        String confirmPw = Main.readPasswordHidden();
+
+                        if (!newPw.equals(confirmPw)) {
+                            System.out.println(UIHelper.RED + "Passwords do not match." + UIHelper.RESET);
+                            continue;
+                        }
+
+                        // Publish password change request
+                        broker.publish(EventType.ACCOUNT_EDIT_REQUESTED, new com.common.dto.account.AccountEditRequest(
+                                currentDisplayUser.getId(), null, null, null, null, newPw));
+                        User updated = BrokerUtils.requestOnce(broker, EventType.ACCOUNT_EDIT_REQUESTED, null,
+                                EventType.ACCOUNT_UPDATE_SUCCESS, 3000);
+
+                        if (updated != null) {
+                            System.out.println(UIHelper.GREEN + "Password changed successfully!" + UIHelper.RESET);
+                            UIHelper.pause();
+                            viewAccount(scanner, broker);
+                            return;
+                        } else {
+                            System.out.println(UIHelper.RED + "Password change failed." + UIHelper.RESET);
+                        }
+                    } else {
+                        System.out.println(UIHelper.RED + "Current password is incorrect." + UIHelper.RESET);
+                    }
+                }
+                case "5" -> {
+                    System.out.println(
+                            UIHelper.YELLOW + "Payment card editing is not fully implemented." + UIHelper.RESET);
+                    System.out.println(
+                            UIHelper.YELLOW + "Please use 'Add payment card' to add new cards." + UIHelper.RESET);
+                }
+                case "6" -> {
+                    System.out.print("Card number: ");
+                    String cardNum = scanner.nextLine().trim();
+                    System.out.print("Cardholder name: ");
+                    String cardName = scanner.nextLine().trim();
+                    System.out.print("Expiry (MM/YY): ");
+                    String expiry = scanner.nextLine().trim();
+
+                    // Create and publish payment card add request
+                    com.common.dto.payment.PaymentCardAddRequest cardRequest = new com.common.dto.payment.PaymentCardAddRequest(
+                            currentDisplayUser.getId(), cardName, cardNum, expiry, "CREDIT");
+                    broker.publish(EventType.PAYMENT_CARD_ADD_REQUESTED, cardRequest);
+                    System.out.println(UIHelper.GREEN + "Payment card added successfully!" + UIHelper.RESET);
+                    UIHelper.pause();
+                }
+                case "7" -> {
+                    return;
+                }
+                default -> System.out.println(UIHelper.RED + "Invalid Input" + UIHelper.RESET);
+            }
+        }
     }
 
     private static String safeValue(String value) {

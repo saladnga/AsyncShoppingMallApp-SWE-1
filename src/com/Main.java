@@ -31,101 +31,170 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.Scanner;
 import java.io.Console; // For hidden password input
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 
 public class Main {
 
+    // ============================================================
+    // STATE
+    // ============================================================
+
+    private static final DateTimeFormatter ORDER_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+
     public static User currentUser = null;
     private static final Scanner scanner = new Scanner(System.in);
+
+    private static boolean selectingItem = false;
+    private static boolean inWishlistMenu = false;
+    private static boolean inPaymentCardMenu = false;
+    private static boolean inNotificationMenu = false;
+
+    private static int selectedItemId = -1;
+    private static String lastMenu = "GUEST";
+    private static OrderCreateRequest pendingOrderRequest = null;
+    
+    // Notification system
+    private static final List<String> notifications = new ArrayList<>();
+    
+    public static List<String> getNotifications() {
+        return new ArrayList<>(notifications);
+    }
+    
+    public static void addNotification(String message) {
+        notifications.add(message);
+        System.out.println("[Main] Notification added: " + message);
+    }
+    
+    public static void clearNotifications() {
+        notifications.clear();
+        System.out.println("[Main] Notifications cleared");
+    }
+
+    // ============================================================
+    // CORE SERVICES
+    // ============================================================
+
+    private static AsyncMessageBroker broker;
+    private static Database database;
 
     // Subsystems
     private static AccountManagement account;
     private static ItemManagement item;
     private static Messaging messaging;
-    private static OrderManagement order;
-    private static PaymentService payment;
+    private static OrderManagement orderSubsystem;
+    private static PaymentManagement paymentSubsystem;
     private static Reporting reporting;
+    private static WishlistManagement wishlistSubsystem;
+    private static ItemRepository itemRepository;
+    private static OrderRepository orderRepository;
+    private static OrderItemRepository orderItemRepository;
 
-    private static WishlistManagement wishlist;
-
-    // Broker + DB
-    private static AsyncMessageBroker broker;
-    private static Database database;
+    // Payment Managers (Option A)
+    private static PaymentCardManager paymentCardManager;
+    private static PaymentAuthorizationManager paymentAuthManager;
+    private static PaymentTransactionManager paymentTxnManager;
+    private static PaymentControllerManager paymentController;
 
     // Secret codes for staff/CEO registration
     private static final String STAFF_SECRET_CODE = "STAFF2025";
     private static final String CEO_SECRET_CODE = "CEO2025";
 
+    // ============================================================
+    // MAIN
+    // ============================================================
+
     public static void main(String[] args) {
         UIHelper.clear();
         System.out.println(UIHelper.CYAN + "[Main] Shopping Mall Application Starting..." + UIHelper.RESET);
 
-        // --------------------------------------------------------------
-        // 1. Init Broker
-        // --------------------------------------------------------------
+        // ------------------------------------------------------------
+        // INIT BROKER
+        // ------------------------------------------------------------
         broker = new AsyncMessageBroker(1000, 8);
         broker.start();
 
-        // --------------------------------------------------------------
-        // 2. Init DB
-        // --------------------------------------------------------------
+        // ------------------------------------------------------------
+        // INIT DATABASE
+        // ------------------------------------------------------------
         database = new Database();
         database.connect("jdbc:sqlite:shopping_mall.db");
 
-        // --------------------------------------------------------------
-        // 3. Init Repositories + Services
-        // --------------------------------------------------------------
-        // AuthenticationService has no-arg constructor; create it first
+        // ------------------------------------------------------------
+        // INIT REPOSITORIES
+        // ------------------------------------------------------------
         AuthenticationService authService = new AuthenticationService();
 
-        // SQLiteUserRepository requires Database + AuthenticationService
         UserRepository userRepo = new SQLiteUserRepository(database, authService);
-
-        // Managers for account subsystem
-        RegisterManager registerManager = new RegisterManager(userRepo,
-                authService);
-        LoginManager loginManager = new LoginManager(userRepo, authService);
-        EditAccountManager editAccountManager = new EditAccountManager(userRepo, authService);
-        ViewAccountManager viewAccountManager = new ViewAccountManager(userRepo);
-
-        // Item repository (persisted in SQLite)
-        ItemRepository itemRepo = new SQLiteItemRepository(database);
-        ItemRankingRepository itemRankingRepo = new com.repository.InMemoryItemRankingRepository();
-
-        ReportRepository reportRepo = new SQLiteReportRepository(database);
-        ReportManager reportManager = new ReportManager(reportRepo, null, itemRepo); // null for OrderRepository until
-                                                                                     // implemented
-
-        BrowseItemManager browseItemManager = new BrowseItemManager(itemRepo);
-
-        CreateOrderManager createOrderManager = new CreateOrderManager(itemRepo, null, null);
-        EditItemManager editItemManager = new EditItemManager(itemRepo);
-        LikeManager likeManager = new LikeManager(itemRepo);
-        RankingManager rankingManager = new RankingManager(itemRankingRepo, itemRepo);
-
+        itemRepository = new SQLiteItemRepository(database);
+        ItemRankingRepository rankingRepo = new InMemoryItemRankingRepository();
         WishlistRepository wishlistRepo = new SQLiteWishlistRepository(database);
-        AddWishlistManager addWishlist = new AddWishlistManager(wishlistRepo, itemRepo);
-        RemoveWishlistManager removeWishlist = new RemoveWishlistManager(wishlistRepo);
-        ViewWishlistManager viewWishlist = new ViewWishlistManager(wishlistRepo, itemRepo);
+        PaymentCardRepository cardRepo = new SQLitePaymentCardRepository(database);
 
-        // --------------------------------------------------------------
-        // 4. Init Subsystems
-        // --------------------------------------------------------------
-        account = new AccountManagement(registerManager, loginManager, viewAccountManager);
-        item = new ItemManagement(itemRepo);
-        messaging = new Messaging();
-        order = new OrderManagement();
-        payment = new PaymentService();
+        orderRepository = new SQLiteOrderRepository(database);
+        orderItemRepository = new SQLiteOrderItemRepository(database);
+
+        // ------------------------------------------------------------
+        // INIT MANAGERS
+        // ------------------------------------------------------------
+
+        RegisterManager registerMgr = new RegisterManager(userRepo, authService);
+        LoginManager loginMgr = new LoginManager(userRepo, authService);
+        ViewAccountManager viewAccountMgr = new ViewAccountManager(userRepo);
+        EditAccountManager editAccountMgr = new EditAccountManager(userRepo, authService);
+
+        BrowseItemManager browseManager = new BrowseItemManager(itemRepository);
+        EditItemManager editItemManager = new EditItemManager(itemRepository);
+        LikeManager likeManager = new LikeManager(itemRepository);
+        RankingManager rankingManager = new RankingManager(rankingRepo, itemRepository);
+
+        // Payment managers
+        paymentCardManager = new PaymentCardManager(cardRepo);
+        // Note: For now, we'll only initialize the payment card manager
+        // Other managers require PaymentTransactionRepository which needs more setup
+
+        // Payment controller (requires full payment manager setup)
+        // paymentController = new PaymentControllerManager(
+        //     paymentCardManager,
+        //     paymentAuthManager,
+        //     paymentTxnManager,
+        //     receiptMgr,
+        //     broker);
+
+        // ------------------------------------------------------------
+        // INIT SUBSYSTEMS
+        // ------------------------------------------------------------
+
+        account = new AccountManagement(registerMgr, loginMgr, viewAccountMgr, editAccountMgr);
+        item = new ItemManagement(itemRepository);
+        messaging = new Messaging(database);
+        // Initialize CreateOrderManager first
+        CreateOrderManager createOrderMgr = new CreateOrderManager(itemRepository, orderRepository,
+                orderItemRepository);
+        orderSubsystem = new OrderManagement(
+                createOrderMgr,
+                orderRepository,
+                orderItemRepository,
+                itemRepository);
+        paymentSubsystem = new PaymentManagement();
+        // Initialize report manager and reporting subsystem
+        ReportManager reportManager = new ReportManager(new SQLiteReportRepository(database), orderRepository,
+                itemRepository);
         reporting = new Reporting(reportManager);
-        wishlist = new WishlistManagement(wishlistRepo, itemRepo);
+        wishlistSubsystem = new WishlistManagement(wishlistRepo, itemRepository);
 
         Subsystems[] modules = {
-                account, item, messaging, order,
-                payment, reporting, wishlist
+                account, item, messaging, orderSubsystem,
+                paymentSubsystem,
+                reporting, wishlistSubsystem
         };
 
         for (Subsystems m : modules)
             m.init(broker);
 
+        // ============================================================
+        // EVENT LISTENERS
+        // ============================================================
         // Listen for login success/failure so Main can update currentUser and menus
         broker.registerListener(EventType.USER_LOGIN_SUCCESS, msg -> CompletableFuture.runAsync(() -> {
             Object payload = msg.getPayload();
@@ -136,7 +205,11 @@ public class Main {
             if (u instanceof User user) {
                 currentUser = user;
                 System.out.println("[Main] Welcome " + user.getUsername() + " (" + user.getRole() + ")");
-                // User logged in successfully - UI menus will handle role-specific display
+                switch (user.getRole()) {
+                    // case CUSTOMER -> lastMenu = "CUSTOMER";
+                    // case STAFF -> lastMenu = "STAFF";
+                    // case CEO -> lastMenu = "CEO";
+                }
             }
         }));
 
@@ -156,7 +229,9 @@ public class Main {
         // }
         // }));
 
-        broker.registerListener(EventType.USER_LOGIN_FAILED, msg -> CompletableFuture.runAsync(() -> {
+        broker.registerListener(EventType.USER_LOGIN_FAILED, msg -> CompletableFuture.runAsync(() ->
+
+        {
             System.out.println("[Main] Login failed: " + msg.getPayload());
         }));
 
@@ -167,10 +242,9 @@ public class Main {
                 Object user = map.get("user");
                 if (user instanceof User u) {
                     System.out.println("[Main] Registration successful! Welcome " + u.getUsername());
-                    System.out.println("[Main] You can now login with your credentials.");
                 }
             } else {
-                System.out.println("[Main] Registration successful! You can now login.");
+                System.out.println("[Main] You can now login.");
             }
         }));
 
@@ -183,9 +257,15 @@ public class Main {
                 } else {
                     System.out.println("=== Your Wishlist ===");
                     for (Object obj : items) {
-                        if (obj instanceof Item item) {
-                            System.out.println(item.getId() + " | " + item.getName() +
-                                    " | $" + item.getPrice() + " | stock=" + item.getStockQuantity());
+                        if (obj instanceof Wishlist wishlistItem) {
+                            // Fetch item details from repository
+                            Item item = itemRepository.findById(wishlistItem.getItemId());
+                            if (item != null) {
+                                System.out.println(item.getId() + " | " + item.getName() +
+                                        " | $" + item.getPrice() + " | stock=" + item.getStockQuantity());
+                            } else {
+                                System.out.println("Item #" + wishlistItem.getItemId() + " (details unavailable)");
+                            }
                         }
                     }
                     System.out.println("=====================");
@@ -224,23 +304,26 @@ public class Main {
             }
         }));
 
-        // // Handle order history responses
-        // broker.registerListener(EventType.ORDER_HISTORY_RETURNED, msg ->
-        // CompletableFuture.runAsync(() -> {
-        // Object payload = msg.getPayload();
-        // if (payload instanceof List<?> orders) {
-        // if (orders.isEmpty()) {
-        // System.out.println("You have no order history.");
-        // } else {
-        // System.out.println("=== Your Order History ===");
-        // for (Object obj : orders) {
-        // if (obj instanceof Order order) {
-        // System.out.println("Order ID: " + order.getId() +
-        // " | Date: " + order.getOrderDate() +
-        // " | Total: $" + order.getTotalAmount() +
-        // " | Status: " + order.getStatus());
-        // }
-        // }
+        // Handle order history responses
+        broker.registerListener(EventType.ORDER_HISTORY_RETURNED, msg -> CompletableFuture.runAsync(() -> {
+            Object payload = msg.getPayload();
+            if (payload instanceof List<?> orders) {
+                if (orders.isEmpty()) {
+                    System.out.println("You have no order history.");
+                } else {
+                    System.out.println("=== Your Order History ===");
+                    for (Object obj : orders) {
+                        if (obj instanceof Order order) {
+                            System.out.println("Order ID: " + order.getId() +
+                                    " | Date: " + order.getOrderDate() +
+                                    " | Total: $" + order.getTotalAmount() +
+                                    " | Status: " + order.getStatus());
+                        }
+                    }
+                    System.out.println("========================");
+                }
+            }
+        }));
         // System.out.println("==========================");
         // }
         // }
@@ -259,6 +342,104 @@ public class Main {
                 System.out.println("===========================");
             } else {
                 System.out.println("[Main] Unable to retrieve account information.");
+            }
+        }));
+
+        // Handle account update responses
+        broker.registerListener(EventType.ACCOUNT_UPDATE_SUCCESS, msg -> CompletableFuture.runAsync(() -> {
+            Object payload = msg.getPayload();
+            if (payload instanceof User user) {
+                currentUser = user; // Update current user
+                System.out.println("[Main] Account updated successfully!");
+            }
+        }));
+
+        broker.registerListener(EventType.ACCOUNT_UPDATE_FAILED, msg -> CompletableFuture.runAsync(() -> {
+            System.out.println("[Main] Account update failed: " + msg.getPayload());
+        }));
+
+        // Handle payment card responses
+        broker.registerListener(EventType.PAYMENT_CARD_ADD_REQUESTED, msg -> CompletableFuture.runAsync(() -> {
+            Object payload = msg.getPayload();
+            if (payload instanceof com.common.dto.payment.PaymentCardAddRequest request) {
+                try {
+                    // Create new payment card
+                    PaymentCard newCard = new PaymentCard(
+                        0, // ID will be generated
+                        request.getUserId(),
+                        request.getCardType(),
+                        request.getCardNumber(), // Will be masked in repository
+                        request.getExpiryDate(),
+                        request.getCardHolderName(),
+                        false
+                    );
+                    
+                    paymentCardManager.addNewCard(newCard);
+                    System.out.println("[Main] Payment card added successfully for user " + request.getUserId());
+                } catch (Exception e) {
+                    System.out.println("[Main] Failed to add payment card: " + e.getMessage());
+                }
+            }
+        }));
+
+        broker.registerListener(EventType.PAYMENT_CARD_EDIT_REQUESTED, msg -> CompletableFuture.runAsync(() -> {
+            System.out.println("[Main] Payment card edit request received (edit functionality to be implemented)");
+        }));
+
+        broker.registerListener(EventType.PAYMENT_CARD_LIST_REQUESTED, msg -> CompletableFuture.runAsync(() -> {
+            Object payload = msg.getPayload();
+            if (payload instanceof Integer userId) {
+                try {
+                    List<PaymentCard> cards = paymentCardManager.getCardsForUser(userId);
+                    broker.publish(EventType.PAYMENT_CARD_LIST_RETURNED, cards);
+                    System.out.println("[Main] Found " + cards.size() + " payment cards for user " + userId);
+                } catch (Exception e) {
+                    System.out.println("[Main] Failed to list payment cards: " + e.getMessage());
+                    broker.publish(EventType.PAYMENT_CARD_LIST_RETURNED, new ArrayList<>());
+                }
+            }
+        }));
+        
+        // Notification handlers for orders and purchases
+        broker.registerListener(EventType.ORDER_CONFIRMED, msg -> CompletableFuture.runAsync(() -> {
+            Object payload = msg.getPayload();
+            if (payload instanceof Order order) {
+                String message = String.format("Order #%d confirmed successfully! Total: $%.2f", 
+                    order.getId(), order.getTotalAmount());
+                addNotification(message);
+                System.out.println("[Main] Enhanced order confirmation: " + message);
+            } else {
+                addNotification("Order confirmed successfully!");
+                System.out.println("[Main] Basic order confirmation notification added");
+            }
+        }));
+        
+        broker.registerListener(EventType.PAYMENT_AUTHORIZED, msg -> CompletableFuture.runAsync(() -> {
+            addNotification("Payment authorized - your order is being processed");
+            System.out.println("[Main] Payment authorization notification added");
+        }));
+        
+        broker.registerListener(EventType.PAYMENT_DENIED, msg -> CompletableFuture.runAsync(() -> {
+            addNotification("Payment was denied. Please check your payment method.");
+            System.out.println("[Main] Payment denial notification added");
+        }));
+        
+        // Handler for item updates (likes, stock changes)
+        broker.registerListener(EventType.ITEM_UPDATE_SUCCESS, msg -> CompletableFuture.runAsync(() -> {
+            Object payload = msg.getPayload();
+            if (payload instanceof Item item) {
+                System.out.println("[Main] Item updated: " + item.getName() + " (Likes: " + item.getLikeCount() + ", Stock: " + item.getStockQuantity() + ")");
+            }
+        }));
+        
+        // Handler for wishlist operations
+        broker.registerListener(EventType.WISHLIST_ADD_SUCCESS, msg -> CompletableFuture.runAsync(() -> {
+            Object payload = msg.getPayload();
+            if (payload instanceof Item item) {
+                addNotification("Added '" + item.getName() + "' to your wishlist");
+                System.out.println("[Main] Wishlist add success: " + item.getName());
+            } else {
+                System.out.println("[Main] Wishlist add success (generic)");
             }
         }));
 
@@ -363,7 +544,7 @@ public class Main {
             Object payload = msg.getPayload();
             if (payload instanceof UserMessage message) {
                 if (currentUser != null && currentUser.getRole() == User.Role.STAFF) {
-                    System.out.println("\nNew message from Customer ID: " + message.getSenderId());
+                    System.out.println("\n🔔 New message from Customer ID: " + message.getSenderId());
                     System.out.println("Subject: " + message.getSubject());
                     System.out.println("Preview: " + message.getContent().substring(0,
                             Math.min(50, message.getContent().length())) + "...");
@@ -375,7 +556,7 @@ public class Main {
             Object payload = msg.getPayload();
             if (payload instanceof UserMessage message) {
                 if (currentUser != null && currentUser.getId() == message.getRecipientId()) {
-                    System.out.println("\nNew reply from staff!");
+                    System.out.println("\n💬 New reply from staff!");
                     System.out.println("Message: " + message.getContent());
                 }
             }
@@ -387,6 +568,21 @@ public class Main {
             Object payload = msg.getPayload();
             if (payload instanceof Item item) {
                 System.out.println("Item: " + item.getName() + " | Stock: " + item.getStockQuantity());
+            }
+        }));
+
+        // Add notification system for customer notifications
+        broker.registerListener(EventType.ORDER_CONFIRMED, msg -> CompletableFuture.runAsync(() -> {
+            if (currentUser != null) {
+                notifications.add("Order confirmed successfully! Check 'View My Orders' for details.");
+                System.out.println("[Main] Notification added: Order confirmed");
+            }
+        }));
+        
+        broker.registerListener(EventType.MESSAGE_SENT_CONFIRMATION, msg -> CompletableFuture.runAsync(() -> {
+            if (currentUser != null) {
+                notifications.add("New message from staff: " + msg.getPayload());
+                System.out.println("[Main] Notification added: Message from staff");
             }
         }));
 
@@ -431,30 +627,33 @@ public class Main {
         }));
 
         // --------------------------------------------------------------
-        // 5. Main menu loop
+        // 5. Main loop
         // --------------------------------------------------------------
         while (true) {
-            if (currentUser == null) {
+            UIHelper.clear();
+            if (currentUser == null)
                 showGuestMenu();
-            } else {
+            else {
                 switch (currentUser.getRole()) {
                     case CUSTOMER -> CustomerUI.showMenu(scanner, broker);
                     case STAFF -> StaffUI.showMenu(scanner, broker);
                     case CEO -> CeoUI.showMenu(scanner, broker);
                 }
             }
+
+            String input = scanner.nextLine();
+            if (input.equalsIgnoreCase("Q"))
+                break;
         }
-        // Note: shutdown is called from individual UI menus when user quits
+        shutdown(modules);
     }
 
     // ============================================================
     // MENU HANDLERS
     // ============================================================
     private static void showGuestMenu() {
-        UIHelper.clear();
-
         UIHelper.box(
-                UIHelper.color("WELCOME TO SHOPPING MALL APP", UIHelper.BLUE),
+                UIHelper.color("     WELCOME TO SHOPPING MALL APP", UIHelper.BLUE),
                 List.of(
                         "1. Login",
                         "2. Register",
@@ -468,12 +667,8 @@ public class Main {
             case "1" -> login();
             case "2" -> register();
             case "3" -> CustomerUI.browse(scanner, broker);
-            case "Q", "q" ->
-                shutdown(new Subsystems[] { account, item, messaging, order, payment, reporting, wishlist });
-            default -> {
-                System.out.println(UIHelper.RED + "Invalid option!" + UIHelper.RESET);
-                UIHelper.pause();
-            }
+            case "4" -> shutdown(new Subsystems[] {});
+            default -> System.out.println(UIHelper.RED + "[Error] Invalid selection!" + UIHelper.RESET);
         }
     }
 
@@ -481,9 +676,10 @@ public class Main {
     // ACTIONS
     // ============================================================
 
-    private static String readPasswordHidden() {
+    public static String readPasswordHidden() {
         Console console = System.console();
         if (console != null) {
+            // If console is available, use it to hide password input
             char[] password = console.readPassword();
             return password != null ? new String(password) : "";
         } else {

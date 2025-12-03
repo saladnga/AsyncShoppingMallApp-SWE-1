@@ -53,8 +53,7 @@ public class CreateOrderManager {
         OrderItem orderItem = new OrderItem(0, orderId, itemId, quantity, item.getPrice());
         orderItemRepo.insert(orderItem);
 
-        // 5. Reduce stock
-        itemRepo.updateStock(itemId, item.getStockQuantity() - quantity);
+        // Note: Stock will be decremented after payment authorization in OrderManagement
 
         return order;
     }

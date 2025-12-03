@@ -7,8 +7,6 @@ import com.broker.Message;
 import com.entities.Report;
 import com.entities.User;
 import com.managers.report.ReportManager;
-
-import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Logger;
 
@@ -17,8 +15,9 @@ import java.util.logging.Logger;
  * ------------------------------------------------------------
  * - Generates DAILY & MONTHLY reports when triggered by TimeActor
  * - Only CEO is allowed to view reports
- * - generateReport() returns a FORM (structure only), not sample data
+ * - generateReport() returns a form
  */
+
 public class Reporting implements Subsystems {
     private final ReportManager reportManager;
 
@@ -123,14 +122,26 @@ public class Reporting implements Subsystems {
     }
 
     private Report generateReport(Report.ReportType type) {
+        Report report;
         switch (type) {
             case DAILY -> {
-                return reportManager.generateDailyReport();
+                report = reportManager.generateDailyReport();
             }
             case MONTHLY -> {
-                return reportManager.generateMonthlyReport();
+                report = reportManager.generateMonthlyReport();
             }
             default -> throw new IllegalArgumentException("Unknown report type: " + type);
         }
+
+        // Empty Report - check if report has no sales data
+        if (report != null && report.getSummary() != null) {
+            String summary = report.getSummary();
+            // Check if totalSales is 0.0 or totalOrders is 0
+            if (summary.contains("totalSales: 0.0") || summary.contains("totalOrders: 0")) {
+                LOGGER.info("[Reporting] Generated empty report (no sales data found)");
+            }
+        }
+
+        return report;
     }
 }

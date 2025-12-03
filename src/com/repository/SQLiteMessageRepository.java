@@ -238,33 +238,32 @@ public class SQLiteMessageRepository extends MessageRepository {
     }
 
     @Override
-    public synchronized List<UserMessage> getConversationMessages(int userId, int otherUserId) {
+    public synchronized List<UserMessage> getConversationMessages(int customerId, int viewerId) {
         String sql = """
                 SELECT m.id, m.conversation_id, m.user_id, m.role, m.content,
                        m.is_read, m.created_at * 1000 as timestamp_ms,
                        c.customer_id, c.subject
                 FROM messages m
                 JOIN conversations c ON m.conversation_id = c.id
-                WHERE (c.customer_id = ? OR c.customer_id = ?) AND
-                      (m.user_id = ? OR m.user_id = ?)
+                WHERE c.customer_id = ?
                 ORDER BY m.created_at ASC
                 """;
 
-        return db.queryList(sql, this::mapMessage, userId, otherUserId, userId, otherUserId);
+        return db.queryList(sql, this::mapMessage, customerId);
     }
 
     @Override
-    public synchronized void markMessagesAsRead(int userId, int otherUserId) {
+    public synchronized void markMessagesAsRead(int customerId, int viewerId) {
         String sql = """
                 UPDATE messages
                 SET is_read = 1
                 WHERE conversation_id IN (
                     SELECT id FROM conversations
-                    WHERE customer_id = ? OR customer_id = ?
+                    WHERE customer_id = ?
                 ) AND user_id != ? AND is_read = 0
                 """;
 
-        db.executeUpdate(sql, userId, otherUserId, userId);
+        db.executeUpdate(sql, customerId, viewerId);
     }
 
     @Override

@@ -26,17 +26,29 @@ public class LoadConversationManager implements Listener {
         return CompletableFuture.runAsync(() -> {
 
             if (message.getPayload() instanceof ConversationLoadRequest req) {
-                // Load specific conversation between two users
-                List<UserMessage> messages = repo.getConversationMessages(req.getUserId(), req.getOtherUserId());
-                
-                // Mark messages as read for the requesting user
-                repo.markMessagesAsRead(req.getUserId(), req.getOtherUserId());
-                
+                int viewerId = req.getUserId();
+                int customerId;
+
+                // If otherUserId == -1, this is the customer viewing their own conversation(s)
+                // Otherwise, staff is viewing conversation with a specific customer
+                if (req.getOtherUserId() == -1) {
+                    customerId = viewerId;
+                } else {
+                    customerId = req.getOtherUserId();
+                }
+
+                // Load full conversation for this customer (all messages between customer and staff)
+                List<UserMessage> messages = repo.getConversationMessages(customerId, viewerId);
+
+                // Mark messages as read for this viewer
+                repo.markMessagesAsRead(customerId, viewerId);
+
                 broker.publish(EventType.CONVERSATION_MESSAGES_RETURNED, messages);
                 broker.publish(EventType.MESSAGE_MARKED_AS_READ, req);
-                
-                System.out.println("[LoadConversationManager] Loaded " + messages.size() + " messages between users " + req.getUserId() + " and " + req.getOtherUserId());
-                
+
+                System.out.println("[LoadConversationManager] Loaded " + messages.size()
+                        + " messages for customer " + customerId + " (viewer=" + viewerId + ")");
+
             } else if (message.getPayload() instanceof MessageHistoryRequest req) {
                 // Legacy support for MESSAGE_HISTORY_REQUESTED
                 var conversation = repo.getConversation(req.getUserId(), req.getStaffId());

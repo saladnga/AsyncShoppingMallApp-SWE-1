@@ -38,6 +38,7 @@ public class OrderManagement implements Subsystems {
     private final Listener handlePurchase = this::onPurchase;
     private final Listener handleHistory = this::onHistoryRequest;
     private final Listener handleStatusUpdate = this::onStatusUpdate;
+    private final Listener handleCustomerList = this::onCustomerListRequest;
 
     @Override
     public void init(AsyncMessageBroker broker) {
@@ -50,6 +51,7 @@ public class OrderManagement implements Subsystems {
         broker.registerListener(EventType.PURCHASE_REQUESTED, handlePurchase);
         broker.registerListener(EventType.ORDER_HISTORY_REQUESTED, handleHistory);
         broker.registerListener(EventType.ORDER_STATUS_UPDATE_REQUESTED, handleStatusUpdate);
+        broker.registerListener(EventType.ORDER_CUSTOMER_LIST_REQUESTED, handleCustomerList);
 
         System.out.println("[OrderManagement] Initialized.");
     }
@@ -67,6 +69,7 @@ public class OrderManagement implements Subsystems {
         broker.unregisterListener(EventType.PURCHASE_REQUESTED, handlePurchase);
         broker.unregisterListener(EventType.ORDER_HISTORY_REQUESTED, handleHistory);
         broker.unregisterListener(EventType.ORDER_STATUS_UPDATE_REQUESTED, handleStatusUpdate);
+        broker.unregisterListener(EventType.ORDER_CUSTOMER_LIST_REQUESTED, handleCustomerList);
 
         System.out.println("[OrderManagement] Shutdown complete.");
     }
@@ -210,14 +213,17 @@ public class OrderManagement implements Subsystems {
                     // Update order with shipping address if provided
                     if (req.getShippingAddress() != null && !req.getShippingAddress().isBlank()) {
                         order.setBillingAddress(req.getShippingAddress());
+                        if (orderRepo instanceof com.repository.SQLiteOrderRepository sqliteRepo) {
+                            sqliteRepo.updateBillingAddress(order.getId(), req.getShippingAddress());
+                        }
                     }
 
                     // Update total amount in order (sum of all items) and database
                     if (totalAmount != order.getTotalAmount()) {
                         order.setTotalAmount(totalAmount);
                         // Update in database
-                        if (orderRepo instanceof com.repository.SQLiteOrderRepository) {
-                            ((com.repository.SQLiteOrderRepository) orderRepo).updateTotal(order.getId(), totalAmount);
+                        if (orderRepo instanceof com.repository.SQLiteOrderRepository sqliteRepo) {
+                            sqliteRepo.updateTotal(order.getId(), totalAmount);
                         }
                     }
 
@@ -361,6 +367,23 @@ public class OrderManagement implements Subsystems {
 
             // Publish confirmation
             broker.publish(EventType.ORDER_STATUS_RETURNED, order);
+        });
+    }
+
+    // ============================================================
+    // ORDER_CUSTOMER_LIST_REQUESTED
+    // ============================================================
+    private CompletableFuture<Void> onCustomerListRequest(Message message) {
+        return CompletableFuture.runAsync(() -> {
+            try {
+                List<Integer> customerIds = orderRepo.findCustomersWithOrders();
+                broker.publish(EventType.ORDER_CUSTOMER_LIST_RETURNED, customerIds);
+                System.out.println("[OrderManagement] Returned " + customerIds.size()
+                        + " customers with orders for staff view.");
+            } catch (Exception ex) {
+                System.out.println("[OrderManagement] Failed to load customers with orders: " + ex.getMessage());
+                broker.publish(EventType.ORDER_CUSTOMER_LIST_RETURNED, new ArrayList<Integer>());
+            }
         });
     }
 }

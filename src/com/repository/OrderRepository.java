@@ -21,6 +21,11 @@ public interface OrderRepository {
     List<Order> findByCustomer(int customerId);
 
     /**
+     * Get distinct customer IDs that have at least one order.
+     */
+    List<Integer> findCustomersWithOrders();
+
+    /**
      * Update the status (PLACED, CANCELLED, DELIVERED).
      */
     void updateStatus(int orderId, Order.OrderStatus status);

@@ -61,9 +61,23 @@ public class SQLiteOrderRepository implements OrderRepository {
     }
 
     @Override
+    public List<Integer> findCustomersWithOrders() {
+        String sql = "SELECT DISTINCT customer_id FROM orders ORDER BY customer_id ASC";
+        return db.queryList(sql, rs -> rs.getInt("customer_id"));
+    }
+
+    @Override
     public void updateStatus(int orderId, OrderStatus status) {
         String sql = "UPDATE orders SET status = ? WHERE id = ?";
         db.executeUpdate(sql, status.name(), orderId);
+    }
+
+    /**
+     * Update billing address for an order.
+     */
+    public void updateBillingAddress(int orderId, String billingAddress) {
+        String sql = "UPDATE orders SET billing_address = ? WHERE id = ?";
+        db.executeUpdate(sql, billingAddress, orderId);
     }
 
     /**

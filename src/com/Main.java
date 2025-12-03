@@ -28,6 +28,8 @@ import com.managers.wishlist.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.Scanner;
 import java.io.Console; // For hidden password input
@@ -56,6 +58,8 @@ public class Main {
 
     // Notification system
     private static final List<String> notifications = new ArrayList<>();
+    // Track delivered orders that already generated notifications
+    private static final Set<Integer> deliveredNotified = new HashSet<>();
 
     public static List<String> getNotifications() {
         return new ArrayList<>(notifications);
@@ -69,6 +73,12 @@ public class Main {
     public static void clearNotifications() {
         notifications.clear();
         // System.out.println("[Main] Notifications cleared");
+    }
+
+    public static void removeNotification(int index) {
+        if (index >= 0 && index < notifications.size()) {
+            notifications.remove(index);
+        }
     }
 
     // ============================================================
@@ -312,25 +322,41 @@ public class Main {
             }
         }));
 
-        // Handle order history responses
+        // Handle order history responses (used mainly to create delivered notifications)
         broker.registerListener(EventType.ORDER_HISTORY_RETURNED, msg -> CompletableFuture.runAsync(() -> {
-            // Object payload = msg.getPayload();
-            // if (payload instanceof List<?> orders) {
-            // if (orders.isEmpty()) {
-            // System.out.println("You have no order history.");
-            // } else {
-            // System.out.println("=== Your Order History ===");
-            // for (Object obj : orders) {
-            // if (obj instanceof Order order) {
-            // System.out.println("Order ID: " + order.getId() +
-            // " | Date: " + order.getOrderDate() +
-            // " | Total: $" + order.getTotalAmount() +
-            // " | Status: " + order.getStatus());
-            // }
-            // }
-            // System.out.println("========================");
-            // }
-            // }
+            if (currentUser == null || currentUser.getRole() != User.Role.CUSTOMER)
+                return;
+
+            Object payload = msg.getPayload();
+            if (!(payload instanceof List<?> list))
+                return;
+
+            for (Object obj : list) {
+                if (obj instanceof Order order) {
+                    if (order.getCustomerId() == currentUser.getId()
+                            && order.getStatus() == Order.OrderStatus.DELIVERED
+                            && !deliveredNotified.contains(order.getId())) {
+                        addNotification(String.format("Your order #%d has been delivered.", order.getId()));
+                        deliveredNotified.add(order.getId());
+                    }
+                }
+            }
+        }));
+
+        // Handle explicit order status updates (e.g., staff changed status)
+        broker.registerListener(EventType.ORDER_STATUS_RETURNED, msg -> CompletableFuture.runAsync(() -> {
+            Object payload = msg.getPayload();
+            if (!(payload instanceof Order order)) {
+                return;
+            }
+            // Generic status change notification; will be seen by the customer on next login
+            addNotification(String.format("Status of your order #%d changed to %s.",
+                    order.getId(), order.getStatus()));
+
+            // If status is DELIVERED, also mark as delivered-notified to avoid duplicates
+            if (order.getStatus() == Order.OrderStatus.DELIVERED) {
+                deliveredNotified.add(order.getId());
+            }
         }));
         // System.out.println("==========================");
         // }
@@ -466,7 +492,13 @@ public class Main {
 
         // Handle messaging responses
         broker.registerListener(EventType.MESSAGE_SENT_CONFIRMATION, msg -> CompletableFuture.runAsync(() -> {
-            System.out.println("[Main] Message sent successfully!");
+            Object payload = msg.getPayload();
+            if (payload instanceof com.entities.UserMessage m) {
+                // If staff sent a message, notify customer
+                addNotification("New reply from staff: " + m.getSubject());
+            } else {
+                System.out.println("[Main] Message sent successfully!");
+            }
         }));
 
         broker.registerListener(EventType.MESSAGE_LIST_RETURNED, msg -> CompletableFuture.runAsync(() -> {
@@ -492,34 +524,19 @@ public class Main {
 
         // Handle conversation responses
         broker.registerListener(EventType.CONVERSATION_LIST_RETURNED, msg -> CompletableFuture.runAsync(() -> {
+            if (currentUser != null) {
+                return; // UI components handle rendering
+            }
             Object payload = msg.getPayload();
-            if (payload instanceof List<?> conversations) {
-                if (conversations.isEmpty()) {
-                    System.out.println("No conversations found.");
-                } else {
-                    System.out.println("=== Conversations ===");
-                    for (Object obj : conversations) {
-                        if (obj instanceof Conversation conv) {
-                            if (currentUser.getRole() == User.Role.CUSTOMER) {
-                                // Customer sees staff info
-                                System.out.println("With: " + conv.getStaffName() +
-                                        " | Last: " + conv.getLastMessage() +
-                                        " | Unread: " + conv.getUnreadCount());
-                            } else {
-                                // Staff sees customer ID clearly for replying
-                                System.out.println("Customer ID: " + conv.getCustomerId() +
-                                        " (" + conv.getCustomerName() + ")" +
-                                        " | Last: " + conv.getLastMessage() +
-                                        " | Unread: " + conv.getUnreadCount());
-                            }
-                        }
-                    }
-                }
-                UIHelper.pause();
+            if (payload instanceof List<?> conversations && conversations.isEmpty()) {
+                System.out.println("No conversations found.");
             }
         }));
 
         broker.registerListener(EventType.CONVERSATION_MESSAGES_RETURNED, msg -> CompletableFuture.runAsync(() -> {
+            if (currentUser != null) {
+                return; // Avoid double-printing when UI handles chat
+            }
             Object payload = msg.getPayload();
             if (payload instanceof List<?> messages) {
                 if (messages.isEmpty()) {
@@ -687,7 +704,12 @@ public class Main {
                         "Q. Quit"));
         System.out.print(UIHelper.YELLOW + "Select an option: " + UIHelper.RESET);
 
-        String input = scanner.nextLine();
+        String input = scanner.nextLine().trim();
+
+        if (input.equalsIgnoreCase("q")) {
+            // Quit immediately when user types q/Q at guest menu
+            System.exit(0);
+        }
 
         switch (input) {
             case "1" -> login();
@@ -812,21 +834,11 @@ public class Main {
             return;
         }
 
-        System.out.print("Phone: ");
+        System.out.print("Phone (optional, press Enter to skip): ");
         String phone = scanner.nextLine().trim();
-        if (phone.isEmpty()) {
-            System.out.println(UIHelper.RED + "Phone number cannot be empty." + UIHelper.RESET);
-            UIHelper.pause();
-            return;
-        }
 
-        System.out.print("Address: ");
+        System.out.print("Address (optional, press Enter to skip): ");
         String address = scanner.nextLine().trim();
-        if (address.isEmpty()) {
-            System.out.println(UIHelper.RED + "Address cannot be empty." + UIHelper.RESET);
-            UIHelper.pause();
-            return;
-        }
 
         broker.publish(EventType.USER_REGISTER_REQUESTED,
                 new RegistrationRequest(username, email, password, role, phone, address));

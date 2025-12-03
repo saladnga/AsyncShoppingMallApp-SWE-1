@@ -79,7 +79,7 @@ public class OrderManagement implements Subsystems {
         return CompletableFuture.runAsync(() -> {
             Order order = (Order) m.getPayload();
 
-            System.out.println("[OrderManagement] Creating order " + order.getId());
+            // System.out.println("[OrderManagement] Creating order " + order.getId());
 
             // publish correctly with broker.publish(...)
             broker.publish(EventType.PURCHASE_REQUESTED, order);
@@ -102,7 +102,7 @@ public class OrderManagement implements Subsystems {
             if (payload instanceof OrderCreateRequest req) {
                 // Stock validation should happen before payment
                 // This subsystem assumes stock is already validated
-                System.out.println("[OrderManagement] Purchase requested for user " + req.getUserId());
+                // System.out.println("[OrderManagement] Purchase requested for user " + req.getUserId());
 
                 // Publish payment authorization request
                 // Note: In a real implementation, we'd need to create the Order first
@@ -132,8 +132,8 @@ public class OrderManagement implements Subsystems {
             // Handle OrderCreateRequest - create the order now that payment is authorized
             if (payload instanceof OrderCreateRequest req) {
                 try {
-                    System.out.println(
-                            "[OrderManagement] Payment authorized for user " + req.getUserId() + ", creating order...");
+                    // System.out.println(
+                    //         "[OrderManagement] Payment authorized for user " + req.getUserId() + ", creating order...");
 
                     if (req.getItems().isEmpty()) {
                         System.out.println("[OrderManagement] OrderCreateRequest has no items");
@@ -167,14 +167,14 @@ public class OrderManagement implements Subsystems {
                     if (firstItemEntity != null) {
                         int oldStock = firstItemEntity.getStockQuantity();
                         int newStock = oldStock - firstItem.getQuantity();
-                        System.out.println("[OrderManagement] Updating stock for item " + firstItem.getItemId() +
-                                ": " + oldStock + " -> " + newStock);
+                        // System.out.println("[OrderManagement] Updating stock for item " + firstItem.getItemId() +
+                        //         ": " + oldStock + " -> " + newStock);
                         itemRepo.updateStock(firstItem.getItemId(), newStock);
 
                         // Verify the update
-                        Item updatedItem = itemRepo.findById(firstItem.getItemId());
-                        System.out.println("[OrderManagement] Stock after update: " +
-                                (updatedItem != null ? updatedItem.getStockQuantity() : "item not found"));
+                        // Item updatedItem = itemRepo.findById(firstItem.getItemId());
+                        // System.out.println("[OrderManagement] Stock after update: " +
+                        //         (updatedItem != null ? updatedItem.getStockQuantity() : "item not found"));
                     }
 
                     // Add remaining items to the same order
@@ -202,8 +202,8 @@ public class OrderManagement implements Subsystems {
                         // Reduce stock
                         int oldStock = item.getStockQuantity();
                         int newStock = oldStock - itemReq.getQuantity();
-                        System.out.println("[OrderManagement] Updating stock for item " + itemReq.getItemId() +
-                                ": " + oldStock + " -> " + newStock);
+                        // System.out.println("[OrderManagement] Updating stock for item " + itemReq.getItemId() +
+                        //         ": " + oldStock + " -> " + newStock);
                         itemRepo.updateStock(itemReq.getItemId(), newStock);
                     }
 
@@ -230,7 +230,7 @@ public class OrderManagement implements Subsystems {
                 order = (Order) payload;
             } else if (payload instanceof com.common.dto.payment.PaymentAuthorizeRequest req) {
                 // If we receive PaymentAuthorizeRequest, we need to get/create the order
-                System.out.println("[OrderManagement] Payment authorized for user " + req.getUserId());
+                // System.out.println("[OrderManagement] Payment authorized for user " + req.getUserId());
                 // Can't create order without item info, just publish confirmation
                 broker.publish(EventType.ORDER_CONFIRMED, req);
                 return;
@@ -242,7 +242,7 @@ public class OrderManagement implements Subsystems {
 
             if (order != null) {
                 // TC18: Order is already PLACED status from CreateOrderManager
-                System.out.println("[OrderManagement] Payment authorized – confirming order " + order.getId() + "...");
+                // System.out.println("[OrderManagement] Payment authorized – confirming order " + order.getId() + "...");
 
                 broker.publish(EventType.ORDER_CONFIRMED, order);
                 broker.publish(EventType.EMAIL_RECEIPT_REQUESTED, order);
@@ -266,11 +266,11 @@ public class OrderManagement implements Subsystems {
                 reason = (String) payload;
             } else if (payload instanceof com.common.dto.payment.PaymentAuthorizeRequest req) {
                 reason = "Payment Failed: Authorization denied";
-                System.out.println("[OrderManagement] Payment denied for user " + req.getUserId() + ", amount $"
-                        + req.getAmount());
+                // System.out.println("[OrderManagement] Payment denied for user " + req.getUserId() + ", amount $"
+                //         + req.getAmount());
             } else if (payload instanceof Order order) {
                 reason = "Payment Failed: Order #" + order.getId() + " could not be processed";
-                System.out.println("[OrderManagement] Payment denied for order " + order.getId());
+                // System.out.println("[OrderManagement] Payment denied for order " + order.getId());
                 // Order status should NOT be set to PLACED
                 // Order remains in its previous state (e.g., PENDING)
             }
@@ -293,7 +293,7 @@ public class OrderManagement implements Subsystems {
                 return;
             }
 
-            System.out.println("[OrderManagement] Cancelling order " + order.getId());
+            // System.out.println("[OrderManagement] Cancelling order " + order.getId());
 
             // Check if order is cancellable
             // Only PLACED orders can be cancelled, not SHIPPED or DELIVERED
@@ -329,7 +329,7 @@ public class OrderManagement implements Subsystems {
             } else if (payload instanceof com.entities.User) {
                 customerId = ((com.entities.User) payload).getId();
             } else {
-                System.out.println("[OrderManagement] Invalid payload for order history: " + payload);
+                // System.out.println("[OrderManagement] Invalid payload for order history: " + payload);
                 broker.publish(EventType.ORDER_HISTORY_RETURNED, new ArrayList<>());
                 return;
             }

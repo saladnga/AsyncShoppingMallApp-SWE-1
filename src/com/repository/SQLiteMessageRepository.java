@@ -114,30 +114,63 @@ public class SQLiteMessageRepository extends MessageRepository {
 
     @Override
     public synchronized List<Conversation> getConversationsForUser(int userId) {
-        String sql = """
-                SELECT c.id, c.customer_id, c.subject, c.created_at,
-                       COUNT(CASE WHEN m.is_read = 0 AND m.user_id != ? THEN 1 END) as unread_count,
-                       MAX(m.created_at) as last_message_time,
-                       (SELECT content FROM messages WHERE conversation_id = c.id
-                        ORDER BY created_at DESC LIMIT 1) as last_message
-                FROM conversations c
-                LEFT JOIN messages m ON c.id = m.conversation_id
-                WHERE c.customer_id = ?
-                GROUP BY c.id, c.customer_id, c.subject, c.created_at
-                ORDER BY last_message_time DESC
-                """;
+        // Check user role
+        String userRole = determineUserRole(userId);
 
-        return db.queryList(sql, rs -> {
-            Conversation conv = new Conversation();
-            conv.setCustomerId(rs.getInt("customer_id"));
-            conv.setStaffId(userId); // Assuming current user is staff
-            conv.setCustomerName("Customer " + rs.getInt("customer_id"));
-            conv.setStaffName("Staff " + userId);
-            conv.setUnreadCount(rs.getInt("unread_count"));
-            conv.setLastMessage(rs.getString("last_message"));
-            conv.setLastMessageTime(rs.getLong("last_message_time") * 1000);
-            return conv;
-        }, userId, userId);
+        if ("Customer".equals(userRole)) {
+            // Customer sees only their own conversations
+            String sql = """
+                    SELECT c.id, c.customer_id, c.subject, c.created_at,
+                           COUNT(CASE WHEN m.is_read = 0 AND m.user_id != ? THEN 1 END) as unread_count,
+                           MAX(m.created_at) as last_message_time,
+                           (SELECT content FROM messages WHERE conversation_id = c.id
+                            ORDER BY created_at DESC LIMIT 1) as last_message
+                    FROM conversations c
+                    LEFT JOIN messages m ON c.id = m.conversation_id
+                    WHERE c.customer_id = ?
+                    GROUP BY c.id, c.customer_id, c.subject, c.created_at
+                    ORDER BY last_message_time DESC
+                    """;
+
+            return db.queryList(sql, rs -> {
+                Conversation conv = new Conversation();
+                int customerId = rs.getInt("customer_id");
+                conv.setCustomerId(customerId);
+                conv.setStaffId(userId);
+                conv.setCustomerName("Customer " + customerId);
+                conv.setStaffName("Staff " + userId);
+                conv.setUnreadCount(rs.getInt("unread_count"));
+                conv.setLastMessage(rs.getString("last_message"));
+                conv.setLastMessageTime(rs.getLong("last_message_time") * 1000);
+                return conv;
+            }, userId, userId);
+        } else {
+            // Staff/CEO sees all conversations
+            String sql = """
+                    SELECT c.id, c.customer_id, c.subject, c.created_at,
+                           COUNT(CASE WHEN m.is_read = 0 AND m.role = 'Customer' AND m.is_read = 0 THEN 1 END) as unread_count,
+                           MAX(m.created_at) as last_message_time,
+                           (SELECT content FROM messages WHERE conversation_id = c.id
+                            ORDER BY created_at DESC LIMIT 1) as last_message
+                    FROM conversations c
+                    LEFT JOIN messages m ON c.id = m.conversation_id
+                    GROUP BY c.id, c.customer_id, c.subject, c.created_at
+                    ORDER BY last_message_time DESC
+                    """;
+
+            return db.queryList(sql, rs -> {
+                Conversation conv = new Conversation();
+                int customerId = rs.getInt("customer_id");
+                conv.setCustomerId(customerId);
+                conv.setStaffId(userId);
+                conv.setCustomerName("Customer " + customerId);
+                conv.setStaffName("Staff " + userId);
+                conv.setUnreadCount(rs.getInt("unread_count"));
+                conv.setLastMessage(rs.getString("last_message"));
+                conv.setLastMessageTime(rs.getLong("last_message_time") * 1000);
+                return conv;
+            });
+        }
     }
 
     // === HELPER METHODS ===
@@ -245,5 +278,21 @@ public class SQLiteMessageRepository extends MessageRepository {
                 """;
 
         db.executeUpdate(sql, customerId, customerId);
+    }
+
+    @Override
+    public synchronized List<UserMessage> getRecentMessagesFromCustomer(int customerId, int limit) {
+        String sql = """
+                SELECT m.id, m.conversation_id, m.user_id, m.role, m.content,
+                       m.is_read, m.created_at * 1000 as timestamp_ms,
+                       c.customer_id, c.subject
+                FROM messages m
+                JOIN conversations c ON m.conversation_id = c.id
+                WHERE c.customer_id = ? AND m.role = 'Customer'
+                ORDER BY m.created_at DESC
+                LIMIT ?
+                """;
+
+        return db.queryList(sql, this::mapMessage, customerId, limit);
     }
 }

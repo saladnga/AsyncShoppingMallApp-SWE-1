@@ -29,7 +29,7 @@ public class RequestWrapper {
     public static RequestWrapper fromMessage(Message msg, Object payload) {
         String cid = msg.getCorrelationId() != null
                 ? msg.getCorrelationId()
-                : msg.getId(); // fallback: root correlation
+                : msg.getId();
 
         return new RequestWrapper(cid, payload);
     }

@@ -53,22 +53,22 @@ public class Main {
     private static int selectedItemId = -1;
     private static String lastMenu = "GUEST";
     private static OrderCreateRequest pendingOrderRequest = null;
-    
+
     // Notification system
     private static final List<String> notifications = new ArrayList<>();
-    
+
     public static List<String> getNotifications() {
         return new ArrayList<>(notifications);
     }
-    
+
     public static void addNotification(String message) {
         notifications.add(message);
-        System.out.println("[Main] Notification added: " + message);
+        // System.out.println("[Main] Notification added: " + message);
     }
-    
+
     public static void clearNotifications() {
         notifications.clear();
-        System.out.println("[Main] Notifications cleared");
+        // System.out.println("[Main] Notifications cleared");
     }
 
     // ============================================================
@@ -99,6 +99,18 @@ public class Main {
     // Secret codes for staff/CEO registration
     private static final String STAFF_SECRET_CODE = "STAFF2025";
     private static final String CEO_SECRET_CODE = "CEO2025";
+
+    // ============================================================
+    // REPOSITORY GETTERS (for UI access)
+    // ============================================================
+
+    public static ItemRepository getItemRepository() {
+        return itemRepository;
+    }
+
+    public static OrderItemRepository getOrderItemRepository() {
+        return orderItemRepository;
+    }
 
     // ============================================================
     // MAIN
@@ -155,11 +167,11 @@ public class Main {
 
         // Payment controller (requires full payment manager setup)
         // paymentController = new PaymentControllerManager(
-        //     paymentCardManager,
-        //     paymentAuthManager,
-        //     paymentTxnManager,
-        //     receiptMgr,
-        //     broker);
+        // paymentCardManager,
+        // paymentAuthManager,
+        // paymentTxnManager,
+        // receiptMgr,
+        // broker);
 
         // ------------------------------------------------------------
         // INIT SUBSYSTEMS
@@ -205,11 +217,6 @@ public class Main {
             if (u instanceof User user) {
                 currentUser = user;
                 System.out.println("[Main] Welcome " + user.getUsername() + " (" + user.getRole() + ")");
-                switch (user.getRole()) {
-                    // case CUSTOMER -> lastMenu = "CUSTOMER";
-                    // case STAFF -> lastMenu = "STAFF";
-                    // case CEO -> lastMenu = "CEO";
-                }
             }
         }));
 
@@ -250,46 +257,47 @@ public class Main {
 
         // Handle wishlist responses
         broker.registerListener(EventType.WISHLIST_DETAILS_RETURNED, msg -> CompletableFuture.runAsync(() -> {
-            Object payload = msg.getPayload();
-            if (payload instanceof List<?> items) {
-                if (items.isEmpty()) {
-                    System.out.println("Your wishlist is empty.");
-                } else {
-                    System.out.println("=== Your Wishlist ===");
-                    for (Object obj : items) {
-                        if (obj instanceof Wishlist wishlistItem) {
-                            // Fetch item details from repository
-                            Item item = itemRepository.findById(wishlistItem.getItemId());
-                            if (item != null) {
-                                System.out.println(item.getId() + " | " + item.getName() +
-                                        " | $" + item.getPrice() + " | stock=" + item.getStockQuantity());
-                            } else {
-                                System.out.println("Item #" + wishlistItem.getItemId() + " (details unavailable)");
-                            }
-                        }
-                    }
-                    System.out.println("=====================");
-                }
-            }
+            // Object payload = msg.getPayload();
+            // if (payload instanceof List<?> items) {
+            // if (items.isEmpty()) {
+            // System.out.println("Your wishlist is empty.");
+            // } else {
+            // System.out.println("=== Your Wishlist ===");
+            // for (Object obj : items) {
+            // if (obj instanceof Wishlist wishlistItem) {
+            // // Fetch item details from repository
+            // Item item = itemRepository.findById(wishlistItem.getItemId());
+            // if (item != null) {
+            // System.out.println(item.getId() + " | " + item.getName() +
+            // " | $" + item.getPrice() + " | stock=" + item.getStockQuantity());
+            // } else {
+            // System.out.println("Item #" + wishlistItem.getItemId() + " (details
+            // unavailable)");
+            // }
+            // }
+            // }
+            // System.out.println("=====================");
+            // }
+            // }
         }));
 
         broker.registerListener(EventType.WISHLIST_ADD_SUCCESS, msg -> {
-            System.out.println("Item added to wishlist successfully");
+            System.out.println("[Main] Item added to wishlist successfully");
             return CompletableFuture.completedFuture(null);
         });
 
         broker.registerListener(EventType.WISHLIST_ADD_FAILED, msg -> {
-            System.out.println("Failed to add item: " + msg.getPayload());
+            System.out.println("[Main] Failed to add item: " + msg.getPayload());
             return CompletableFuture.completedFuture(null);
         });
 
         broker.registerListener(EventType.WISHLIST_REMOVE_SUCCESS, msg -> {
-            System.out.println("Item removed from wishlist successfully");
+            System.out.println("[Main] Item removed from wishlist successfully");
             return CompletableFuture.completedFuture(null);
         });
 
         broker.registerListener(EventType.WISHLIST_REMOVE_FAILED, msg -> {
-            System.out.println("Failed to remove item: " + msg.getPayload());
+            System.out.println("[Main] Failed to remove item: " + msg.getPayload());
             return CompletableFuture.completedFuture(null);
         });
 
@@ -306,23 +314,23 @@ public class Main {
 
         // Handle order history responses
         broker.registerListener(EventType.ORDER_HISTORY_RETURNED, msg -> CompletableFuture.runAsync(() -> {
-            Object payload = msg.getPayload();
-            if (payload instanceof List<?> orders) {
-                if (orders.isEmpty()) {
-                    System.out.println("You have no order history.");
-                } else {
-                    System.out.println("=== Your Order History ===");
-                    for (Object obj : orders) {
-                        if (obj instanceof Order order) {
-                            System.out.println("Order ID: " + order.getId() +
-                                    " | Date: " + order.getOrderDate() +
-                                    " | Total: $" + order.getTotalAmount() +
-                                    " | Status: " + order.getStatus());
-                        }
-                    }
-                    System.out.println("========================");
-                }
-            }
+            // Object payload = msg.getPayload();
+            // if (payload instanceof List<?> orders) {
+            // if (orders.isEmpty()) {
+            // System.out.println("You have no order history.");
+            // } else {
+            // System.out.println("=== Your Order History ===");
+            // for (Object obj : orders) {
+            // if (obj instanceof Order order) {
+            // System.out.println("Order ID: " + order.getId() +
+            // " | Date: " + order.getOrderDate() +
+            // " | Total: $" + order.getTotalAmount() +
+            // " | Status: " + order.getStatus());
+            // }
+            // }
+            // System.out.println("========================");
+            // }
+            // }
         }));
         // System.out.println("==========================");
         // }
@@ -331,25 +339,25 @@ public class Main {
 
         // Handle account view responses
         broker.registerListener(EventType.ACCOUNT_VIEW_RETURNED, msg -> CompletableFuture.runAsync(() -> {
-            Object payload = msg.getPayload();
-            if (payload instanceof User user) {
-                System.out.println("=== Account Information ===");
-                System.out.println("Username: " + user.getUsername());
-                System.out.println("Email: " + user.getEmail());
-                System.out.println("Role: " + user.getRole());
-                System.out.println("Phone Number: " + user.getPhoneNumber());
-                System.out.println("Address: " + user.getAddress());
-                System.out.println("===========================");
-            } else {
-                System.out.println("[Main] Unable to retrieve account information.");
-            }
+            // Object payload = msg.getPayload();
+            // if (payload instanceof User user) {
+            // System.out.println("=== Account Information ===");
+            // System.out.println("Username: " + user.getUsername());
+            // System.out.println("Email: " + user.getEmail());
+            // System.out.println("Role: " + user.getRole());
+            // System.out.println("Phone Number: " + user.getPhoneNumber());
+            // System.out.println("Address: " + user.getAddress());
+            // System.out.println("===========================");
+            // } else {
+            // System.out.println("[Main] Unable to retrieve account information.");
+            // }
         }));
 
         // Handle account update responses
         broker.registerListener(EventType.ACCOUNT_UPDATE_SUCCESS, msg -> CompletableFuture.runAsync(() -> {
             Object payload = msg.getPayload();
             if (payload instanceof User user) {
-                currentUser = user; // Update current user
+                currentUser = user;
                 System.out.println("[Main] Account updated successfully!");
             }
         }));
@@ -365,15 +373,14 @@ public class Main {
                 try {
                     // Create new payment card
                     PaymentCard newCard = new PaymentCard(
-                        0, // ID will be generated
-                        request.getUserId(),
-                        request.getCardType(),
-                        request.getCardNumber(), // Will be masked in repository
-                        request.getExpiryDate(),
-                        request.getCardHolderName(),
-                        false
-                    );
-                    
+                            0, // ID will be generated
+                            request.getUserId(),
+                            request.getCardType(),
+                            request.getCardNumber(), // Will be masked in repository
+                            request.getExpiryDate(),
+                            request.getCardHolderName(),
+                            false);
+
                     paymentCardManager.addNewCard(newCard);
                     System.out.println("[Main] Payment card added successfully for user " + request.getUserId());
                 } catch (Exception e) {
@@ -386,52 +393,66 @@ public class Main {
             System.out.println("[Main] Payment card edit request received (edit functionality to be implemented)");
         }));
 
+        broker.registerListener(EventType.PAYMENT_CARD_REMOVE_REQUESTED, msg -> CompletableFuture.runAsync(() -> {
+            Object payload = msg.getPayload();
+            if (payload instanceof Integer cardId) {
+                try {
+                    paymentCardManager.removeCard(cardId);
+                    System.out.println("[Main] Payment card removed successfully (ID: " + cardId + ")");
+                } catch (Exception e) {
+                    System.out.println("[Main] Failed to remove payment card: " + e.getMessage());
+                }
+            }
+        }));
+
         broker.registerListener(EventType.PAYMENT_CARD_LIST_REQUESTED, msg -> CompletableFuture.runAsync(() -> {
             Object payload = msg.getPayload();
             if (payload instanceof Integer userId) {
                 try {
                     List<PaymentCard> cards = paymentCardManager.getCardsForUser(userId);
                     broker.publish(EventType.PAYMENT_CARD_LIST_RETURNED, cards);
-                    System.out.println("[Main] Found " + cards.size() + " payment cards for user " + userId);
+                    // System.out.println("[Main] Found " + cards.size() + " payment cards for user
+                    // " + userId);
                 } catch (Exception e) {
-                    System.out.println("[Main] Failed to list payment cards: " + e.getMessage());
+                    // System.out.println("[Main] Failed to list payment cards: " + e.getMessage());
                     broker.publish(EventType.PAYMENT_CARD_LIST_RETURNED, new ArrayList<>());
                 }
             }
         }));
-        
+
         // Notification handlers for orders and purchases
         broker.registerListener(EventType.ORDER_CONFIRMED, msg -> CompletableFuture.runAsync(() -> {
             Object payload = msg.getPayload();
             if (payload instanceof Order order) {
-                String message = String.format("Order #%d confirmed successfully! Total: $%.2f", 
-                    order.getId(), order.getTotalAmount());
+                String message = String.format("Order #%d confirmed successfully! Total: $%.2f",
+                        order.getId(), order.getTotalAmount());
                 addNotification(message);
-                System.out.println("[Main] Enhanced order confirmation: " + message);
+                // System.out.println("[Main] Order confirmation: " + message);
             } else {
-                addNotification("Order confirmed successfully!");
-                System.out.println("[Main] Basic order confirmation notification added");
+                // addNotification("Order confirmed successfully!");
+                System.out.println("[Main] Order confirmed successfully");
             }
         }));
-        
+
         broker.registerListener(EventType.PAYMENT_AUTHORIZED, msg -> CompletableFuture.runAsync(() -> {
-            addNotification("Payment authorized - your order is being processed");
-            System.out.println("[Main] Payment authorization notification added");
+            // addNotification("Payment authorized - your order is being processed");
+            // System.out.println("[Main] Payment authorization notification added");
         }));
-        
+
         broker.registerListener(EventType.PAYMENT_DENIED, msg -> CompletableFuture.runAsync(() -> {
-            addNotification("Payment was denied. Please check your payment method.");
-            System.out.println("[Main] Payment denial notification added");
+            addNotification("[Main] Payment was denied. Please check your payment method.");
+            // System.out.println("[Main] Payment denial notification added");
         }));
-        
+
         // Handler for item updates (likes, stock changes)
         broker.registerListener(EventType.ITEM_UPDATE_SUCCESS, msg -> CompletableFuture.runAsync(() -> {
             Object payload = msg.getPayload();
             if (payload instanceof Item item) {
-                System.out.println("[Main] Item updated: " + item.getName() + " (Likes: " + item.getLikeCount() + ", Stock: " + item.getStockQuantity() + ")");
+                System.out.println("[Main] Item updated: " + item.getName() + " (Likes: " + item.getLikeCount()
+                        + ", Stock: " + item.getStockQuantity() + ")");
             }
         }));
-        
+
         // Handler for wishlist operations
         broker.registerListener(EventType.WISHLIST_ADD_SUCCESS, msg -> CompletableFuture.runAsync(() -> {
             Object payload = msg.getPayload();
@@ -502,19 +523,19 @@ public class Main {
             Object payload = msg.getPayload();
             if (payload instanceof List<?> messages) {
                 if (messages.isEmpty()) {
-                    System.out.println("No messages in this conversation.");
+                    System.out.println(UIHelper.YELLOW + "No messages in this conversation." + UIHelper.RESET);
                 } else {
-                    System.out.println("=== Conversation Messages ===");
+                    System.out.println(UIHelper.CYAN + "\n=== Recent Conversation Messages ===" + UIHelper.RESET);
+                    int count = 0;
                     for (Object obj : messages) {
                         if (obj instanceof UserMessage message) {
-                            String senderType = message.getSenderId() == currentUser.getId() ? "You" : "Other";
+                            String senderType = message.getSenderId() == currentUser.getId() ? "You" : "Customer";
                             System.out.println("[" + senderType + "] " + message.getContent());
                             System.out.println("Time: " + new java.util.Date(message.getTimeStamp()));
-                            System.out.println("Status: " + message.getStatus());
                             System.out.println("---");
                         }
                     }
-                    System.out.println("=============================");
+                    System.out.println(UIHelper.CYAN + "=====================================" + UIHelper.RESET);
                 }
             }
         }));
@@ -564,7 +585,7 @@ public class Main {
 
         // Handle item management responses (for staff)
         broker.registerListener(EventType.ITEM_UPDATE_SUCCESS, msg -> CompletableFuture.runAsync(() -> {
-            System.out.println("[Main] Item operation completed successfully!");
+            // System.out.println("[Main] Item operation completed successfully!");
             Object payload = msg.getPayload();
             if (payload instanceof Item item) {
                 System.out.println("Item: " + item.getName() + " | Stock: " + item.getStockQuantity());
@@ -575,14 +596,19 @@ public class Main {
         broker.registerListener(EventType.ORDER_CONFIRMED, msg -> CompletableFuture.runAsync(() -> {
             if (currentUser != null) {
                 notifications.add("Order confirmed successfully! Check 'View My Orders' for details.");
-                System.out.println("[Main] Notification added: Order confirmed");
+                // System.out.println("[Main] Notification added: Order confirmed");
             }
         }));
-        
+
         broker.registerListener(EventType.MESSAGE_SENT_CONFIRMATION, msg -> CompletableFuture.runAsync(() -> {
             if (currentUser != null) {
-                notifications.add("New message from staff: " + msg.getPayload());
-                System.out.println("[Main] Notification added: Message from staff");
+                Object payload = msg.getPayload();
+                if (payload instanceof UserMessage userMsg) {
+                    notifications.add("New message from staff" + userMsg.getSenderId() + ": " + userMsg.getContent());
+                    System.out.println("[Main] Notification added: Message from staff ID " + userMsg.getSenderId());
+                } else {
+                    notifications.add("New message received");
+                }
             }
         }));
 
@@ -694,9 +720,21 @@ public class Main {
         System.out.println(UIHelper.BLUE + "--- LOGIN ---" + UIHelper.RESET);
         System.out.print("Username/Email: ");
         String name = scanner.nextLine().trim();
+        
+        if (name.isEmpty()) {
+            System.out.println(UIHelper.RED + "Username/Email cannot be empty." + UIHelper.RESET);
+            UIHelper.pause();
+            return;
+        }
 
         System.out.print("Password: ");
         String pw = readPasswordHidden();
+        
+        if (pw.isEmpty()) {
+            System.out.println(UIHelper.RED + "Password cannot be empty." + UIHelper.RESET);
+            UIHelper.pause();
+            return;
+        }
 
         broker.publish(EventType.USER_LOGIN_REQUEST,
                 new LoginRequest(name, pw));
@@ -744,18 +782,51 @@ public class Main {
     private static void requestCredentials(User.Role role, String label) {
         System.out.print("Choose username: ");
         String username = scanner.nextLine().trim();
+        if (username.isEmpty()) {
+            System.out.println(UIHelper.RED + "Username cannot be empty." + UIHelper.RESET);
+            UIHelper.pause();
+            return;
+        }
 
         System.out.print("Email: ");
         String email = scanner.nextLine().trim();
+        if (email.isEmpty() || !email.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$")) {
+            System.out.println(UIHelper.RED + "Please enter a valid email address." + UIHelper.RESET);
+            UIHelper.pause();
+            return;
+        }
 
         System.out.print("Password: ");
         String password = readPasswordHidden();
+        if (password.isEmpty() || password.length() < 6) {
+            System.out.println(UIHelper.RED + "Password must be at least 6 characters." + UIHelper.RESET);
+            UIHelper.pause();
+            return;
+        }
+
+        System.out.print("Confirm Password: ");
+        String confirmPassword = readPasswordHidden();
+        if (!password.equals(confirmPassword)) {
+            System.out.println(UIHelper.RED + "Passwords do not match." + UIHelper.RESET);
+            UIHelper.pause();
+            return;
+        }
 
         System.out.print("Phone: ");
         String phone = scanner.nextLine().trim();
+        if (phone.isEmpty()) {
+            System.out.println(UIHelper.RED + "Phone number cannot be empty." + UIHelper.RESET);
+            UIHelper.pause();
+            return;
+        }
 
         System.out.print("Address: ");
         String address = scanner.nextLine().trim();
+        if (address.isEmpty()) {
+            System.out.println(UIHelper.RED + "Address cannot be empty." + UIHelper.RESET);
+            UIHelper.pause();
+            return;
+        }
 
         broker.publish(EventType.USER_REGISTER_REQUESTED,
                 new RegistrationRequest(username, email, password, role, phone, address));

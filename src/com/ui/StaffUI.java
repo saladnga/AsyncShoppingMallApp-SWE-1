@@ -3,11 +3,13 @@ package com.ui;
 import com.Main;
 import com.broker.AsyncMessageBroker;
 import com.broker.EventType;
+import com.common.dto.account.AccountViewRequest;
 import com.common.dto.item.*;
 import com.common.dto.message.ConversationListRequest;
 import com.common.dto.message.MessageSendRequest;
 import com.common.dto.message.UnreadMessagesRequest;
 import com.entities.Item;
+import com.entities.User;
 
 import java.util.List;
 import java.util.Scanner;
@@ -103,10 +105,15 @@ public class StaffUI {
                 List.of("Fill out the new item details below."));
 
         System.out.print("Name: ");
-        String name = scanner.nextLine();
+        String name = scanner.nextLine().trim();
+        if (name.isEmpty()) {
+            System.out.println(UIHelper.RED + "Name cannot be empty." + UIHelper.RESET);
+            UIHelper.pause();
+            return;
+        }
 
         System.out.println("Description:");
-        String description = scanner.nextLine();
+        String description = scanner.nextLine().trim();
 
         Double price = readPositiveDouble(scanner, "Price: ");
         if (price == null)
@@ -129,20 +136,20 @@ public class StaffUI {
                 UIHelper.color("EDIT ITEM", UIHelper.GREEN),
                 List.of("Update the item details below."));
 
-        System.out.print("Item ID: ");
-        int id = scanner.nextInt();
+        Integer id = readPositiveInt(scanner, "Item ID: ");
+        if (id == null) return;
 
         System.out.print("New Name: ");
-        String name = scanner.nextLine();
+        String name = scanner.nextLine().trim();
 
         System.out.print("New Description: ");
-        String desc = scanner.nextLine();
+        String desc = scanner.nextLine().trim();
 
-        System.out.print("New Price: ");
-        double price = scanner.nextDouble();
+        Double price = readPositiveDouble(scanner, "New Price: ");
+        if (price == null) return;
 
-        System.out.print("New Stock: ");
-        int stock = scanner.nextInt();
+        Integer stock = readPositiveInt(scanner, "New Stock: ");
+        if (stock == null) return;
 
         broker.publish(EventType.ITEM_EDIT_REQUESTED,
                 new ItemEditRequest(id, name, desc, price, stock, null));
@@ -170,7 +177,39 @@ public class StaffUI {
             return;
         }
 
-        System.out.print("Your reply message: ");
+        // Fetch customer information
+        System.out.println(UIHelper.YELLOW + "Fetching customer information..." + UIHelper.RESET);
+        User customer = BrokerUtils.requestOnce(broker, EventType.ACCOUNT_VIEW_REQUESTED, 
+                new AccountViewRequest(customerId),
+                EventType.ACCOUNT_VIEW_RETURNED, 3000);
+
+        if (customer == null) {
+            System.out.println(UIHelper.RED + "Customer with ID " + customerId + " not found." + UIHelper.RESET);
+            UIHelper.pause();
+            return;
+        }
+
+        // Display customer information
+        System.out.println(UIHelper.CYAN + "\n=== Customer Information ===" + UIHelper.RESET);
+        System.out.println("Customer ID: " + customer.getId());
+        System.out.println("Username: " + (customer.getUsername() != null ? customer.getUsername() : "N/A"));
+        System.out.println("Email: " + (customer.getEmail() != null ? customer.getEmail() : "N/A"));
+        System.out.println("Phone: " + (customer.getPhoneNumber() != null ? customer.getPhoneNumber() : "N/A"));
+        System.out.println("Role: " + customer.getRole());
+        System.out.println(UIHelper.CYAN + "============================\n" + UIHelper.RESET);
+
+        // Fetch and display recent messages from this customer
+        broker.publish(EventType.CONVERSATION_LOAD_REQUESTED, 
+                new com.common.dto.message.ConversationLoadRequest(Main.currentUser.getId(), customerId));
+        
+        // Wait a moment for messages to be displayed
+        try {
+            Thread.sleep(500);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+
+        System.out.print("\nYour reply message: ");
         String reply = scanner.nextLine().trim();
 
         if (reply.isEmpty()) {
@@ -183,7 +222,7 @@ public class StaffUI {
         broker.publish(EventType.MESSAGE_SEND_REQUESTED,
                 new MessageSendRequest(Main.currentUser.getId(), customerId, "Reply", reply));
 
-        System.out.println(UIHelper.GREEN + "Reply sent successfully." + UIHelper.RESET);
+        System.out.println(UIHelper.GREEN + "Reply sent successfully to " + customer.getUsername() + "." + UIHelper.RESET);
         UIHelper.pause();
     }
 

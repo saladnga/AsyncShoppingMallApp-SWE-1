@@ -39,4 +39,7 @@ public abstract class MessageRepository {
 
         // Used by SendMessageManager
         public abstract void markCustomerMessagesAsReadByStaff(int customerId, int staffId);
+        
+        // Used by StaffUI to show recent messages from customer before replying
+        public abstract List<UserMessage> getRecentMessagesFromCustomer(int customerId, int limit);
 }

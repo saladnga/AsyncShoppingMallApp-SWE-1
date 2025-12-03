@@ -92,7 +92,7 @@ public class ItemManagement implements Subsystems {
     // ================================================================
     private CompletableFuture<Void> handleBrowse(Message message) {
         return CompletableFuture.runAsync(() -> {
-            System.out.println("[ItemManagement] Browsing all items...");
+            // System.out.println("[ItemManagement] Browsing all items...");
 
             List<Item> items = repo.findAll();
 
@@ -115,7 +115,7 @@ public class ItemManagement implements Subsystems {
                 term = (String) payload;
             }
 
-            System.out.println("[ItemManagement] Searching for: " + (term != null ? term : ""));
+            // System.out.println("[ItemManagement] Searching for: " + (term != null ? term : ""));
 
             List<Item> results = repo.searchByKeyword(term == null ? "" : term);
 
@@ -134,7 +134,7 @@ public class ItemManagement implements Subsystems {
     // ================================================================
     private CompletableFuture<Void> handleUpload(Message message) {
         return CompletableFuture.runAsync(() -> {
-            System.out.println("[ItemManagement] Uploading item...");
+            // System.out.println("[ItemManagement] Uploading item...");
 
             Object payload = message.getPayload();
             if (!(payload instanceof ItemUploadRequest req)) {

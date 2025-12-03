@@ -37,8 +37,9 @@ public class BrokerUtils {
 
                 try {
                     Object p = message.getPayload();
-                    System.out.println("[BrokerUtils] Received " + responseType + " response: " +
-                            (p instanceof java.util.List<?> ? ((java.util.List<?>) p).size() + " items" : p));
+                    // System.out.println("[BrokerUtils] Received " + responseType + " response: " +
+                    // (p instanceof java.util.List<?> ? ((java.util.List<?>) p).size() + " items" :
+                    // p));
                     fut.complete((T) p);
                 } catch (Throwable ex) {
                     System.out.println("[BrokerUtils] Error processing response: " + ex.getMessage());
@@ -51,21 +52,23 @@ public class BrokerUtils {
         try {
             // Register listener BEFORE publishing to avoid race condition
             broker.registerListener(responseType, listener);
-            System.out.println("[BrokerUtils] Registered listener and publishing " + requestType);
+            // System.out.println("[BrokerUtils] Registered listener and publishing " +
+            // requestType);
 
             // Publish the request
             broker.publish(requestType, requestPayload);
 
             // Wait for response
             T result = fut.get(timeoutMs, TimeUnit.MILLISECONDS);
-            System.out.println("[BrokerUtils] Got result for " + responseType);
+            // System.out.println("[BrokerUtils] Got result for " + responseType);
             return result;
         } catch (Exception ex) {
             System.out.println("[BrokerUtils] Timeout waiting for " + responseType + ": " + ex.getMessage());
             return null;
         } finally {
             broker.unregisterListener(responseType, listener);
-            System.out.println("[BrokerUtils] Unregistered listener for " + responseType);
+            // System.out.println("[BrokerUtils] Unregistered listener for " +
+            // responseType);
         }
     }
 }

@@ -31,4 +31,8 @@ public class PaymentCardManager {
             repo.setDefaultCard(card.getUserId(), cardId);
         }
     }
+
+    public void removeCard(int cardId) {
+        repo.delete(cardId);
+    }
 }

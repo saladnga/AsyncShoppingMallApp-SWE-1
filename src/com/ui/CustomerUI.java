@@ -159,7 +159,17 @@ public class CustomerUI {
 
     private static boolean purchase(Scanner scanner, AsyncMessageBroker broker) {
         System.out.print("Enter Item ID to purchase: ");
-        int itemId = Integer.parseInt(scanner.nextLine());
+        int itemId;
+        try {
+            itemId = Integer.parseInt(scanner.nextLine().trim());
+            if (itemId <= 0) {
+                System.out.println(UIHelper.RED + "Item ID must be positive." + UIHelper.RESET);
+                return false;
+            }
+        } catch (NumberFormatException e) {
+            System.out.println(UIHelper.RED + "Invalid item ID. Please enter a valid number." + UIHelper.RESET);
+            return false;
+        }
 
         // Fetch item info
         List<Item> items = BrokerUtils.requestOnce(broker, EventType.ITEM_BROWSE_REQUESTED, null,
@@ -182,7 +192,17 @@ public class CustomerUI {
 
         while (true) {
             System.out.print("Enter quantity to purchase: ");
-            int quantity = Integer.parseInt(scanner.nextLine());
+            int quantity;
+            try {
+                quantity = Integer.parseInt(scanner.nextLine().trim());
+                if (quantity <= 0) {
+                    System.out.println(UIHelper.RED + "Quantity must be positive." + UIHelper.RESET);
+                    continue;
+                }
+            } catch (NumberFormatException e) {
+                System.out.println(UIHelper.RED + "Invalid quantity. Please enter a valid number." + UIHelper.RESET);
+                continue;
+            }
 
             if (quantity > item.getStockQuantity()) {
                 System.out.println(UIHelper.RED + "Insufficient stock available." + UIHelper.RESET);
@@ -246,8 +266,9 @@ public class CustomerUI {
 
     public static void search(Scanner scanner, AsyncMessageBroker broker) {
         System.out.print("Enter keywords: ");
-        String keyword = scanner.nextLine();
+        String keyword = scanner.nextLine().trim();
 
+        // Allow empty search to show all items
         List<Item> result = BrokerUtils.requestOnce(broker, EventType.ITEM_SEARCH_REQUESTED, keyword,
                 EventType.ITEM_LIST_RETURNED, 3000);
 
@@ -460,8 +481,17 @@ public class CustomerUI {
             switch (choice) {
                 case "1" -> {
                     System.out.print("Enter Order ID to view details: ");
-                    int orderId = scanner.nextInt();
-                    scanner.nextLine();
+                    int orderId;
+                    try {
+                        orderId = Integer.parseInt(scanner.nextLine().trim());
+                        if (orderId <= 0) {
+                            System.out.println(UIHelper.RED + "Order ID must be positive." + UIHelper.RESET);
+                            continue;
+                        }
+                    } catch (NumberFormatException e) {
+                        System.out.println(UIHelper.RED + "Invalid order ID. Please enter a valid number." + UIHelper.RESET);
+                        continue;
+                    }
 
                     Order order = orders.stream()
                             .filter(o -> o.getId() == orderId && o.getCustomerId() == Main.currentUser.getId())
@@ -490,38 +520,43 @@ public class CustomerUI {
         detailLines.add(String.format("Order ID: #%d", order.getId()));
         detailLines.add(String.format("Order Date: %s", formatOrderDate(order.getOrderDate())));
         detailLines.add(String.format("Status: %s", order.getStatus()));
-        detailLines.add(String.format("Billing Address: %s", safeValue(order.getBillingAddress())));
+
+        // Fetch user's address as billing address
+        String billingAddress = "Pending Address";
+        if (Main.currentUser != null && Main.currentUser.getAddress() != null
+                && !Main.currentUser.getAddress().isBlank()) {
+            billingAddress = Main.currentUser.getAddress();
+        } else if (order.getBillingAddress() != null && !order.getBillingAddress().isBlank()) {
+            billingAddress = order.getBillingAddress();
+        }
+        detailLines.add(String.format("Billing Address: %s", billingAddress));
         detailLines.add("");
         detailLines.add("Items:");
 
+        // Fetch order items from repository and item details
         boolean printedItems = false;
-        // Try to reflectively obtain items if Order carries them; otherwise show a
-        // helpful message
         try {
-            java.lang.reflect.Method getItems = order.getClass().getMethod("getItems");
-            Object itemsObj = getItems.invoke(order);
-            if (itemsObj instanceof List<?> itemsList && !itemsList.isEmpty()) {
-                for (Object obj : itemsList) {
-                    String line;
-                    try {
-                        java.lang.reflect.Method gid = obj.getClass().getMethod("getItemId");
-                        java.lang.reflect.Method gname = obj.getClass().getMethod("getItemName");
-                        java.lang.reflect.Method gqty = obj.getClass().getMethod("getQuantity");
-                        java.lang.reflect.Method gsub = obj.getClass().getMethod("getSubTotal");
-                        Object iid = gid.invoke(obj);
-                        Object nm = gname.invoke(obj);
-                        Object q = gqty.invoke(obj);
-                        Object st = gsub.invoke(obj);
-                        line = String.format("  - #%s %s x%s -> $%s", iid, nm, q, st);
-                    } catch (NoSuchMethodException nsme) {
-                        line = "  - " + obj.toString();
+            // Use the repositories from Main instead of creating new instances
+            List<com.entities.OrderItem> orderItems = Main.getOrderItemRepository().findByOrderId(order.getId());
+
+            if (orderItems != null && !orderItems.isEmpty()) {
+                for (com.entities.OrderItem orderItem : orderItems) {
+                    com.entities.Item item = Main.getItemRepository().findById(orderItem.getItemId());
+                    if (item != null) {
+                        detailLines.add(String.format("  - %s", item.getName()));
+                        if (item.getDescription() != null && !item.getDescription().isBlank()) {
+                            detailLines.add(String.format("    %s", item.getDescription()));
+                        }
+                        detailLines.add(String.format("    Quantity: %d | Price: $%.2f | Subtotal: $%.2f",
+                                orderItem.getQuantity(), orderItem.getPriceAtPurchase(),
+                                orderItem.getQuantity() * orderItem.getPriceAtPurchase()));
+                        detailLines.add("");
+                        printedItems = true;
                     }
-                    detailLines.add(line);
-                    printedItems = true;
                 }
             }
-        } catch (NoSuchMethodException name) {
         } catch (Exception e) {
+            // Fall back to showing basic message if repository access fails
         }
 
         if (!printedItems) {
@@ -568,9 +603,20 @@ public class CustomerUI {
             return;
 
         System.out.print("Subject: ");
-        String subject = scanner.nextLine();
+        String subject = scanner.nextLine().trim();
+        if (subject.isEmpty()) {
+            System.out.println(UIHelper.RED + "Subject cannot be empty." + UIHelper.RESET);
+            UIHelper.pause();
+            return;
+        }
+
         System.out.print("Your Message: ");
-        String msg = scanner.nextLine();
+        String msg = scanner.nextLine().trim();
+        if (msg.isEmpty()) {
+            System.out.println(UIHelper.RED + "Message cannot be empty." + UIHelper.RESET);
+            UIHelper.pause();
+            return;
+        }
 
         // Send to all staff (recipientId = -1 indicates broadcast to all staff)
         MessageSendRequest req = new MessageSendRequest(Main.currentUser.getId(), -1, subject, msg);
@@ -614,7 +660,8 @@ public class CustomerUI {
         }
 
         // Request authoritative account info from account subsystem
-        User user = BrokerUtils.requestOnce(broker, EventType.ACCOUNT_VIEW_REQUESTED, Main.currentUser.getId(),
+        User user = BrokerUtils.requestOnce(broker, EventType.ACCOUNT_VIEW_REQUESTED,
+                new com.common.dto.account.AccountViewRequest(Main.currentUser.getId()),
                 EventType.ACCOUNT_VIEW_RETURNED, 3000);
 
         if (user == null)
@@ -642,8 +689,11 @@ public class CustomerUI {
             cardLines.add("Use add card to register one)");
         } else {
             for (PaymentCard card : cards) {
-                cardLines.add(String.format("%s **** **** **** %s",
-                        card.getCardType(),
+                cardLines.add(String.format("Card ID: %d | Type: %s (%s)",
+                        card.getId(),
+                        card.getCardType().equals("DEBIT") ? "Debit Card" : "Credit Card",
+                        card.getCardType()));
+                cardLines.add(String.format("Number: **** **** **** %s",
                         card.getLast4Digits()));
                 cardLines.add(String.format("Holder: %s | Expires: %s",
                         card.getCardHolderName(),
@@ -689,7 +739,7 @@ public class CustomerUI {
             System.out.println("2. Edit phone");
             System.out.println("3. Edit Address");
             System.out.println("4. Edit password");
-            System.out.println("5. Edit payment card");
+            System.out.println("5. Remove payment card");
             System.out.println("6. Add payment card");
             System.out.println("7. Back");
             System.out.print(UIHelper.YELLOW + "Select an option: " + UIHelper.RESET);
@@ -699,6 +749,10 @@ public class CustomerUI {
                 case "1" -> {
                     System.out.print("New username: ");
                     String v = scanner.nextLine().trim();
+                    if (v.isEmpty()) {
+                        System.out.println(UIHelper.RED + "Username cannot be empty." + UIHelper.RESET);
+                        continue;
+                    }
                     broker.publish(EventType.ACCOUNT_EDIT_REQUESTED, new com.common.dto.account.AccountEditRequest(
                             currentDisplayUser.getId(), v, null, null, null, null));
                     // Wait for update success
@@ -717,6 +771,10 @@ public class CustomerUI {
                 case "2" -> {
                     System.out.print("New phone: ");
                     String v = scanner.nextLine().trim();
+                    if (v.isEmpty()) {
+                        System.out.println(UIHelper.RED + "Phone cannot be empty." + UIHelper.RESET);
+                        continue;
+                    }
                     broker.publish(EventType.ACCOUNT_EDIT_REQUESTED, new com.common.dto.account.AccountEditRequest(
                             currentDisplayUser.getId(), null, null, v, null, null));
                     // Wait for update success
@@ -735,6 +793,10 @@ public class CustomerUI {
                 case "3" -> {
                     System.out.print("New address: ");
                     String v = scanner.nextLine().trim();
+                    if (v.isEmpty()) {
+                        System.out.println(UIHelper.RED + "Address cannot be empty." + UIHelper.RESET);
+                        continue;
+                    }
                     broker.publish(EventType.ACCOUNT_EDIT_REQUESTED, new com.common.dto.account.AccountEditRequest(
                             currentDisplayUser.getId(), null, null, null, v, null));
                     // Wait for update success
@@ -793,25 +855,87 @@ public class CustomerUI {
                     }
                 }
                 case "5" -> {
-                    System.out.println(
-                            UIHelper.YELLOW + "Payment card editing is not fully implemented." + UIHelper.RESET);
-                    System.out.println(
-                            UIHelper.YELLOW + "Please use 'Add payment card' to add new cards." + UIHelper.RESET);
+                    // Remove payment card
+                    broker.publish(EventType.PAYMENT_CARD_LIST_REQUESTED, currentDisplayUser.getId());
+                    try {
+                        Thread.sleep(500);
+                    } catch (InterruptedException ignored) {
+                    }
+
+                    System.out.print("Enter card ID to remove (or 0 to cancel): ");
+                    try {
+                        int cardId = Integer.parseInt(scanner.nextLine().trim());
+                        if (cardId > 0) {
+                            // Publish remove request
+                            broker.publish(EventType.PAYMENT_CARD_REMOVE_REQUESTED, cardId);
+                            System.out.println(UIHelper.GREEN + "Payment card removed successfully!" + UIHelper.RESET);
+                            UIHelper.pause();
+                            viewAccount(scanner, broker);
+                            return;
+                        }
+                    } catch (NumberFormatException e) {
+                        System.out.println(UIHelper.RED + "Invalid card ID" + UIHelper.RESET);
+                    }
                 }
                 case "6" -> {
-                    System.out.print("Card number: ");
-                    String cardNum = scanner.nextLine().trim();
-                    System.out.print("Cardholder name: ");
-                    String cardName = scanner.nextLine().trim();
-                    System.out.print("Expiry (MM/YY): ");
-                    String expiry = scanner.nextLine().trim();
+                    // Add payment card with validation
+                    System.out.println(UIHelper.CYAN + "\n=== Add Payment Card ===" + UIHelper.RESET);
+
+                    // Card Type
+                    System.out.println("Card Type:");
+                    System.out.println("1. Debit Card");
+                    System.out.println("2. Credit Card");
+                    System.out.print("Select card type: ");
+                    String typeChoice = scanner.nextLine().trim();
+                    String cardType = typeChoice.equals("1") ? "DEBIT" : "CREDIT";
+
+                    // Card Number with validation (13-19 digits)
+                    String cardNum;
+                    while (true) {
+                        System.out.print("Card number (13-19 digits): ");
+                        cardNum = scanner.nextLine().trim().replaceAll("\\s+", ""); // Remove spaces
+                        if (cardNum.matches("\\d{13,19}")) {
+                            break;
+                        } else {
+                            System.out.println(
+                                    UIHelper.RED + "Invalid card number! Must be 13-19 digits." + UIHelper.RESET);
+                        }
+                    }
+
+                    // Cardholder Name (2-50 characters)
+                    String cardName;
+                    while (true) {
+                        System.out.print("Cardholder name (2-50 characters): ");
+                        cardName = scanner.nextLine().trim();
+                        if (cardName.length() >= 2 && cardName.length() <= 50) {
+                            break;
+                        } else {
+                            System.out
+                                    .println(UIHelper.RED + "Invalid name! Must be 2-50 characters." + UIHelper.RESET);
+                        }
+                    }
+
+                    // Expiry Date (MM/YY format)
+                    String expiry;
+                    while (true) {
+                        System.out.print("Expiry (MM/YY): ");
+                        expiry = scanner.nextLine().trim();
+                        if (expiry.matches("(0[1-9]|1[0-2])/\\d{2}")) {
+                            break;
+                        } else {
+                            System.out.println(
+                                    UIHelper.RED + "Invalid format! Use MM/YY (e.g., 12/25)." + UIHelper.RESET);
+                        }
+                    }
 
                     // Create and publish payment card add request
                     com.common.dto.payment.PaymentCardAddRequest cardRequest = new com.common.dto.payment.PaymentCardAddRequest(
-                            currentDisplayUser.getId(), cardName, cardNum, expiry, "CREDIT");
+                            currentDisplayUser.getId(), cardName, cardNum, expiry, cardType);
                     broker.publish(EventType.PAYMENT_CARD_ADD_REQUESTED, cardRequest);
                     System.out.println(UIHelper.GREEN + "Payment card added successfully!" + UIHelper.RESET);
                     UIHelper.pause();
+                    viewAccount(scanner, broker);
+                    return;
                 }
                 case "7" -> {
                     return;

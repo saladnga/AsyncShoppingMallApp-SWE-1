@@ -247,7 +247,7 @@ public class OrderManagement implements Subsystems {
             }
 
             if (order != null) {
-                // TC18: Order is already PLACED status from CreateOrderManager
+                // Order is already PLACED status from CreateOrderManager
                 // System.out.println("[OrderManagement] Payment authorized – confirming order " + order.getId() + "...");
 
                 broker.publish(EventType.ORDER_CONFIRMED, order);

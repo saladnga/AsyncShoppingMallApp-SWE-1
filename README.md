@@ -287,20 +287,12 @@ Currently, the application lacks automated testing. Recommended test coverage:
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-## License
-
-This project is part of CS3332 coursework and is intended for educational purposes.
-
 ## Authors
 
-- **CS3332 Team**: Sam Cao, Quan Nguyen, Vu Hoang
+- **CS3332 Team**: [Sam Cao](https://github.com/Samcave2206), [Quan Nguyen](https://github.com/NguyenQuan297), [Vu Hoang](https://github.com/saladnga)
 
 ## Acknowledgments
 
 - Spring Security for robust password hashing
 - SQLite for lightweight database solution
 - Java Concurrency utilities for async processing
-
----
-
-**Note**: This is an educational project demonstrating advanced Java programming concepts including asynchronous programming, event-driven architecture, and enterprise design patterns.
